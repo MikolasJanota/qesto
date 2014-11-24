@@ -1,0 +1,308 @@
+% File:  Qesto.nw
+% Author: mikolas
+% Created on: Sat, Nov 22, 2014 12:30:28 PM
+% Copyright (C) 2014, Mikolas Janota
+<<public members>>=
+Qesto(const Options& opt, const QFla& fla);
+bool solve();
+
+<<Qesto.hh>>=
+#ifndef QESTO_NW_3930
+#define QESTO_NW_3930
+<<h includes>>
+class Qesto {
+ public: <<public members>>
+ private: <<private members>>
+ private: <<private methods>>
+};
+#endif
+
+<<Qesto.cc>>=
+<<c includes>>
+<<implementation>>
+
+<<implementation>>=
+Qesto::Qesto(const Options& opt, const QFla& fla)
+<<fields init>>
+{
+  assert(fla.pref.size());
+  assert(fla.pref.back().first==EXISTENTIAL);
+  init();
+}
+
+<<private members>>=
+const Options& opt;
+const QFla& fla;
+LevelInfo levs;
+<<fields init>>=
+: opt(opt)
+, fla(fla)
+, levs(fla.pref)
+
+@ We introduce variables $s_k^C$ which indicates that the cause $C$ is
+\emph{selected} at the quantification level $k$; if the variable is false, then we say that the
+clause is \emph{deselected}.
+<<private methods>>=
+Var s(size_t quant_level,size_t clause_index);
+
+@ For each  quantification level, we need a SAT solver, which stores the abstraction
+for that level. To obtain a more uniform implementation there is an \emph{additional
+  level} representing the universal player.
+<<private members>>=
+vector<SATSPC::MiniSatExt> abstractions;
+<<fields init>>=
+, abstractions(fla.pref.size()+1)
+
+
+@ The abstractions must be initialized with requirements on the $s$ variables.
+<<implementation>>=
+void Qesto::init(){
+  init_abstractions();
+  <<init svars>>
+  <<init game rules>>
+}
+
+@ The invariant for variables $s_k^C$ is that an abstraction at level $m$ can
+only refer to variables $s_k^C$ with $k\leq m$.  We  encode into the
+abstractions that $s_k^C$ is true iff $s_{k-1}^C$ is true and all the literals
+at level $k$ in the clause $C$ are falsified.
+<<init svars>>=
+vector<vector<Lit> > level_lits(fla.pref.size()+1);
+for(size_t clause_index=0;clause_index<fla.cnf.size();++clause_index){
+  auto& clause=fla.cnf[clause_index];
+  FOR_EACH(i,level_lits) i->clear();
+  FOR_EACH(i,clause) {
+    const Lit l=*i;
+    level_lits[levs.qlev(l)].push_back(~l);
+  }
+  for(size_t qlev=0;qlev<=fla.pref.size();++qlev){
+    if(qlev) level_lits[qlev].push_back(mkLit(s(qlev-1,clause_index)));
+    encode_and(abstractions[qlev],
+               mkLit(s(qlev,clause_index)),
+               level_lits[qlev]);
+  }
+}
+
+@ At all universal levels, the universal player must select at least one clause
+(otherwise it immediately loses). At all existential levels $k$, the existential player
+must \emph{deselect} all clauses whose highest existential literal is at level$\leq k$.
+<<init game rules>>=
+vec<Lit> aux;
+for(size_t qlev=0;qlev<=fla.pref.size();++qlev){
+  if(level_type(qlev)==EXISTENTIAL) continue;
+  aux.clear();
+  for(size_t clause_index=0;clause_index<fla.cnf.size();++clause_index){
+    aux.push(mkLit(s(qlev,clause_index)));
+  }
+  abstractions[qlev].addClause_(aux);
+}
+for(size_t clause_index=0;clause_index<fla.cnf.size();++clause_index){
+  size_t m=0;
+  bool all_uni=true;
+  FOR_EACH (i,fla.cnf[clause_index]) {
+    const Lit l=*i;
+    const size_t ql=levs.qlev(l);
+    if(levs.type(l)==EXISTENTIAL) all_uni=false;
+    if(levs.type(l)==EXISTENTIAL&&(ql>m)) m=ql;
+  }
+  for(size_t qlev=0;qlev<=fla.pref.size();++qlev){
+    if(level_type(qlev)==UNIVERSAL) continue;
+    if(all_uni||(m<=qlev))
+      abstractions[qlev].addClause(~mkLit(s(qlev,clause_index)));
+  }
+}
+
+@ The solver assigns values to variables, starting from the outermost block of the
+prefix. For each block it uses the corresponding abstraction to obtain  the values.
+If an abstraction becomes unsatisfiable, the solver \emph{backtracks}. Note that at some
+point at least one abstraction must become unsatisfiable due to the dummy
+additional universal level at the end of the prefix. The backtracking is not
+necessarily by 1 quantification level since we analyze the source of
+unsatisfiablity (in principle similar to conflict analysis).
+<<implementation>>=
+bool Qesto::solve() {
+  size_t qlev=0;
+  vec<Lit> conflict_clause;
+  vec<Lit> trail;
+  while (1) {
+    assert(qlev<=fla.pref.size());
+    const bool sat=abstractions[qlev].solve(trail);
+    if(sat) {
+      print_model(std::cerr<<"m: ",abstractions[qlev].model)<<std::endl;
+      assert(qlev<fla.pref.size());
+      for(size_t clause_index=0;clause_index<fla.cnf.size();++clause_index){
+        trail.push(to_lit(abstractions[qlev].model,s(qlev,clause_index)));
+      }
+      ++qlev;
+    } else {//attempt conflict resolution
+       conflict_clause.clear();
+       size_t bt_qlev=-1;
+       const bool resolved=analyze(qlev,trail,/*out*/bt_qlev,/*out*/conflict_clause);
+       if(!resolved) {
+         //formula true iff universal lost
+         return level_type(qlev)==UNIVERSAL;
+       } else {
+         assert(qlev>bt_qlev);
+         do{
+           --qlev;
+           for(size_t clause_index=0;clause_index<fla.cnf.size();++clause_index)
+             trail.pop();
+         } while (qlev>bt_qlev);
+         abstractions[bt_qlev].addClause_(conflict_clause);
+       }
+    }
+  }
+  assert(0);
+  return false;
+}
+
+@ During the  conflict analysis we  will also need a mapping from $s^k_C$ variables
+to the information about them.
+<<private members>>=
+struct SInfo {
+  size_t qlev;
+  size_t clause_index;
+};
+
+<<private methods>>=
+SInfo get_info(Var s) const;
+
+<<implementation>>=
+bool Qesto::analyze(size_t qlev,const vec<Lit>& trail,
+                    size_t& bt_qlev,vec<Lit>& conflict_clause) {
+  auto& abstraction_conflict=abstractions[qlev].conflict;
+  std::cerr<<"abstraction_conflict:"<<abstraction_conflict<<std::endl;
+  QuantifierType loser=level_type(qlev);
+  bool all_opponent=true;
+  for(int i=0;i<abstraction_conflict.size();++i) {
+    const Lit l=abstraction_conflict[i];
+    const auto vi=get_info(var(l));
+    if(level_type(vi.qlev)!=loser) continue;
+    all_opponent=false;
+    if(vi.qlev>bt_qlev) bt_qlev=vi.qlev;
+  }
+  if (all_opponent) return false;
+  if(loser==UNIVERSAL) {
+    <<analyze universal>>
+  } else {
+    <<analyze existential>>
+  }
+}
+
+<<analyze universal>>=
+vector<bool> old_selected(fla.cnf.size(),false);;
+vector<bool> new_deselected(fla.cnf.size(),false);;
+for(int i=0;i<trail.size();++i) {
+  const Lit l=trail[i];
+  const auto vi=get_info(var(l));
+  if(vi.qlev<=bt_qlev&&!sign(l))
+    old_selected[vi.clause_index]=true;
+}
+for(int i=0;i<abstraction_conflict.size();++i) {
+  const Lit l=abstraction_conflict[i];
+  const auto vi=get_info(var(l));
+  if(vi.qlev<=bt_qlev&&!sign(l)) {
+  }
+  if(vi.qlev>=bt_qlev&&!sign(l)) {
+    if(loser==EXISTENTIAL) {
+        conflict_clause.push(~mkLit(s(bt_qlev,vi.clause_index)));
+      } else {
+        assert(sign(l));
+        deselected[vi.clause_index]=true;
+      }
+    }
+  }
+
+<<analyze existential>>
+  vector<bool> old_selecd(fla.cnf.size(),false);;
+  vector<bool> deselected(fla.cnf.size(),false);;
+  for(int i=0;i<abstraction_conflict.size();++i) {
+    const Lit l=abstraction_conflict[i];
+    const auto vi=get_info(var(l));
+    if(sign(l)==(loser==UNIVERSAL)) continue;
+    if(vi.qlev<=bt_qlev) {
+      conflict_clause.push(l);
+    }else {
+      if(loser==EXISTENTIAL) {
+        conflict_clause.push(~mkLit(s(bt_qlev,vi.clause_index)));
+      } else {
+        assert(sign(l));
+        deselected[vi.clause_index]=true;
+      }
+    }
+  }
+  if(loser==UNIVERSAL) {
+    for(size_t clause_index=0;clause_index<fla.cnf.size();++clause_index){
+      if(deselected[clause_index])
+        conflict_clause.push(mkLit(s(bt_qlev,clause_index)));
+    }
+  }
+  return true;
+}
+
+
+<<private members>>=
+vector<Var> svars;
+vector<SInfo> infos;
+
+<<implementation>>=
+void Qesto::init_abstractions() {
+  Var maxv=levs.maxv();
+  const size_t mqlev = fla.pref.size()+1;
+  svars.resize(mqlev*fla.cnf.size(),-1);
+  infos.resize(mqlev*fla.cnf.size());
+  for(size_t qlev=0;qlev<=fla.pref.size();++qlev){
+    abstractions[qlev].new_variables(maxv);
+    for(size_t clause_index=0;clause_index<fla.cnf.size();++clause_index){
+      const Var v=abstractions[qlev].newVar();
+      maxv=v;
+      const size_t index=qlev*(fla.cnf.size())+clause_index;
+      svars[index]=v;
+      infos[v-levs.maxv()-1].qlev=qlev;
+      infos[v-levs.maxv()-1].clause_index=clause_index;
+    }
+  }
+}
+
+<<implementation>>=
+Var Qesto::s(size_t qlev,size_t clause_index){
+  assert(qlev<=fla.pref.size());
+  assert(clause_index<fla.cnf.size());
+  const size_t index=qlev*(fla.cnf.size())+clause_index;
+  assert(index<svars.size());
+  return svars[index];
+}
+
+<<implementation>>=
+Qesto::SInfo Qesto::get_info(Var s) const {
+  assert(s>levs.maxv());
+  return infos[s-levs.maxv()-1];
+}
+
+<<private methods>>=
+inline QuantifierType level_type(size_t qlev) {
+  assert(qlev<=fla.pref.size());
+  return qlev<fla.pref.size() ? levs.level_type(qlev) : UNIVERSAL;
+}
+
+<<c includes>>=
+#include <unordered_set>
+#include "Qesto.hh"
+using std::max;
+using std::min;
+using std::make_pair;
+using SATSPC::vec;
+using SATSPC::Lit;
+
+<<h includes>>=
+#include "Options.hh"
+#include "DataStructures.hh"
+#include "LevelInfo.hh"
+#include <unordered_map>
+#include <utility>
+#include "MiniSatExt.hh"
+
+<<private methods>>=
+void init();
+bool analyze(size_t qlev,const vec<Lit>& trail,const vec<Lit>& trail,size_t& bt_qlev,vec<Lit>& conflict_clause);
+void init_abstractions();
