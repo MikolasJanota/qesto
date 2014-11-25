@@ -161,7 +161,7 @@ bool Qesto::solve() {
   return false;
 }
 
-@ During the  conflict analysis we  will also need a mapping from $s^k_C$ variables
+@ During the  conflict analysis we will also need a mapping from $s^k_C$ variables
 to the information about them.
 <<private members>>=
 struct SInfo {
@@ -172,6 +172,7 @@ struct SInfo {
 <<private methods>>=
 SInfo get_info(Var s) const;
 
+@ As the analysis is quite differmmment for the two players, we separat it into different procedures.
 <<implementation>>=
 bool Qesto::analyze(size_t qlev,const vec<Lit>& trail,
                     size_t& bt_qlev,vec<Lit>& conflict_clause) {
@@ -180,84 +181,92 @@ bool Qesto::analyze(size_t qlev,const vec<Lit>& trail,
   return loser==EXISTENTIAL ? analyze_exists(qlev,trail,bt_qlev,conflict_clause)
                             : analyze_univ(qlev,trail,bt_qlev,conflict_clause);
 }
+
+@ We start with a unsatisfiable core from the abstraction at the conflict
+level [[qlev]]. We need to make sure that at least one of the clauses that
+appear in the core are already deselected when we get to [[qlev]] next
+time.  At this point we're just backtracking by 2 levels.
+<<implementation>>=
 bool Qesto::analyze_exists(size_t qlev,const vec<Lit>& trail,
                           size_t& bt_qlev,vec<Lit>& conflict_clause) {
   assert(level_type(qlev)==EXISTENTIAL);
   if(qlev<2) return false;
-  assert(level_type(qlev-1)==UNIVERSAL);
-  assert(level_type(qlev-2)==EXISTENTIAL);
   bt_qlev=qlev-2;
   if(verb>=2)std::cerr<<"bt_qlev:"<<bt_qlev<<std::endl;
-  vector<bool> sat_cl_afterbt(fla.cnf.size(),false);
-  for(size_t lev=bt_qlev+1;lev<qlev;++lev) {
-    for(size_t clause_index=0;clause_index<fla.cnf.size();++clause_index){
-      if (sat_cl_afterbt[clause_index]) continue;
-      FOR_EACH(li,fla.cnf[clause_index]) {
-        const Lit l=*li;
-        const auto llev=levs.qlev(l);
-        if(llev!=lev) continue;
-        if(eval(l,abstractions[lev].model)==l_True) {
-          sat_cl_afterbt[clause_index]=true;
-          break;
-        }
-      }
-    }
-  }
   const auto& abstraction_conflict=abstractions[qlev].conflict;
   for(int i=0;i<abstraction_conflict.size();++i) {
     const Lit l=abstraction_conflict[i];
     const auto vi=get_info(var(l));
     if(!sign(l)) continue;
-    if(sat_cl_afterbt[vi.clause_index]) continue;
     conflict_clause.push(~mkLit(s(bt_qlev,vi.clause_index)));
   }
   return true;
 }
 
+@ To analyze the conflict for the universal player, we need to look at the
+clauses that are deselected at the moment, and are causing the universal
+player to lose. If a clause is satisfied by the existential player, the
+universal player cannot do anything about it. So we define the backtracking
+level for the universal player as the maximum quantification level of literals
+that satisfy a clause with no true extension literals.
+Any clauses that are satisfied by an existential literal after the
+backtracking level can be removed from the conflict since the player can
+always replicate these moves.
+<<implementation>>=
 bool Qesto::analyze_univ(size_t qlev,const vec<Lit>& trail,
                     size_t& bt_qlev,vec<Lit>& conflict_clause) {
   assert(level_type(qlev)==UNIVERSAL);
-  const auto& abstraction_conflict0=abstractions[qlev].conflict;
-  vec<Lit> abstraction_conflict;
-  for(int i=0;i<abstraction_conflict0.size();++i) {
-    const Lit l=abstraction_conflict0[i];
-    const auto vi=get_info(var(l));
-    if(sign(l)) continue;
-    int j=trail.size();
-    size_t lql=vi.qlev;
-    while(j) {
-      --j;
-      const Lit tl=trail[j];
-      const auto tli=get_info(var(tl));
-      if(tli.clause_index==vi.clause_index
-        &&sign(tl)
-        &&tli.qlev<lql) lql=tli.qlev;
-    }
-    abstraction_conflict.push(mkLit(s(lql,vi.clause_index)));
-  }
-  if(verb>3)std::cerr<<"abstraction_conflict0:"<<abstraction_conflict0<<std::endl;
+  const auto& abstraction_conflict=abstractions[qlev].conflict;
   if(verb>3)std::cerr<<"abstraction_conflict:"<<abstraction_conflict<<std::endl;
+  bt_qlev=-1;
+  const auto sz=abstraction_conflict.size();
   bool all_opponent=true;
-  bt_qlev=0;
-  for(int i=0;i<abstraction_conflict.size();++i) {
-    const Lit l=abstraction_conflict[i];
-    const auto vi=get_info(var(l));
-    assert(!sign(l));
-    if(level_type(vi.qlev)!=UNIVERSAL) continue;
-    all_opponent=false;
-    if(vi.qlev>bt_qlev) bt_qlev=vi.qlev;
+  vector<int> ex_maxlev(sz,-1);// maximum lev of satisfying ex lit
+  for(int i=0;i<sz;++i) {//analyze each clause in the core
+    const Lit conflict_lit=abstraction_conflict[i];
+    if(sign(conflict_lit)) continue;
+    const auto clause_index=get_info(var(conflict_lit)).clause_index;
+    <<update max levels>>
   }
   if(all_opponent) return false;
   if(verb>=2)std::cerr<<"bt_qlev:"<<bt_qlev<<std::endl;
   for(int i=0;i<abstraction_conflict.size();++i) {
     const Lit l=abstraction_conflict[i];
-    const auto vi=get_info(var(l));
     assert(!sign(l));
-    //if(level_type(vi.qlev)!=loser) continue;
-    if(vi.qlev>bt_qlev) continue;
-    conflict_clause.push(mkLit(s(bt_qlev,vi.clause_index),sign(l)));
+    const auto vi=get_info(var(l));
+    if(ex_maxlev[i]<=(int)bt_qlev)
+      conflict_clause.push(mkLit(s(bt_qlev,vi.clause_index)));
   }
   return true;
+}
+
+@ For the current clause we compute what is the highest qualification level of
+a satisfied existential literal (and store it into [[ex_maxlev[i]]]).
+Concurrently we compute the highest quantification level of a universal
+literal (and store it into [[uni_satlev]]).  if a clause is satisfied only by
+universal literals, the maximal quantification level of those is used to
+update the backtracking level (only such clauses can be enforced by the
+universal player).
+<<update max levels>>=
+int uni_satlev=-1;
+FOR_EACH(j,fla.cnf[clause_index]) {
+  const Lit l=*j;
+  if(eval(l,abstractions[levs.qlev(l)].model)!=l_True)
+    continue;//focus only on the satisfied literals
+  const int l_ql=(int)(levs.qlev(l));
+  assert(l_ql>=0);
+  if(levs.type(l)==EXISTENTIAL) {
+    if(l_ql>ex_maxlev[i]) ex_maxlev[i]=l_ql;
+  } else {
+    if(l_ql>uni_satlev) uni_satlev=l_ql;
+  }
+}
+assert(uni_satlev>=0 || ex_maxlev[i]>=0);
+if(ex_maxlev[i]<0) {
+  all_opponent=false;
+  if (all_opponent||uni_satlev>(int)bt_qlev) {
+      bt_qlev=(size_t)uni_satlev;
+  }
 }
 
 <<private members>>=
@@ -315,6 +324,7 @@ using std::min;
 using std::make_pair;
 using SATSPC::vec;
 using SATSPC::Lit;
+using SATSPC::lit_Undef;
 
 <<h includes>>=
 #include "Options.hh"
