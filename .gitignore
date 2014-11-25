@@ -1,4 +1,6 @@
 *~
+*.o
+*.d
 DataStructures.aux
 DataStructures.fdb_latexmk
 DataStructures.fls
