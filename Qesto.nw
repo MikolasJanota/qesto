@@ -33,11 +33,15 @@ Qesto::Qesto(const Options& opt, const QFla& fla)
 <<private members>>=
 const Options& opt;
 const QFla& fla;
+const size_t verb;
 LevelInfo levs;
+size_t bt_count;
 <<fields init>>=
 : opt(opt)
 , fla(fla)
+, verb(opt.get_verbose())
 , levs(fla.pref)
+, bt_count(0)
 
 @ We introduce variables $s_k^C$ which indicates that the cause $C$ is
 \emph{selected} at the quantification level $k$; if the variable is false, then we say that the
@@ -49,9 +53,9 @@ Var s(size_t quant_level,size_t clause_index);
 for that level. To obtain a more uniform implementation there is an \emph{additional
   level} representing the universal player.
 <<private members>>=
-vector<SATSPC::MiniSatExt> abstractions;
+SATSPC::MiniSatExt* abstractions;
 <<fields init>>=
-, abstractions(fla.pref.size()+1)
+, abstractions(new SATSPC::MiniSatExt[fla.pref.size()+1])
 
 
 @ The abstractions must be initialized with requirements on the $s$ variables.
@@ -128,13 +132,14 @@ bool Qesto::solve() {
     assert(qlev<=fla.pref.size());
     const bool sat=abstractions[qlev].solve(trail);
     if(sat) {
-      print_model(std::cerr<<"m: ",abstractions[qlev].model)<<std::endl;
+      if(verb>3)print_model(std::cerr<<"m: ",abstractions[qlev].model)<<std::endl;
       assert(qlev<fla.pref.size());
       for(size_t clause_index=0;clause_index<fla.cnf.size();++clause_index){
         trail.push(to_lit(abstractions[qlev].model,s(qlev,clause_index)));
       }
       ++qlev;
     } else {//attempt conflict resolution
+       ++bt_count;
        conflict_clause.clear();
        size_t bt_qlev=-1;
        const bool resolved=analyze(qlev,trail,/*out*/bt_qlev,/*out*/conflict_clause);
@@ -171,7 +176,7 @@ SInfo get_info(Var s) const;
 bool Qesto::analyze(size_t qlev,const vec<Lit>& trail,
                     size_t& bt_qlev,vec<Lit>& conflict_clause) {
   QuantifierType loser=level_type(qlev);
-  std::cerr<<"loser:"<<loser<<std::endl;
+  if(verb>=2)std::cerr<<"analyse loser:"<<loser<<std::endl;
   return loser==EXISTENTIAL ? analyze_exists(qlev,trail,bt_qlev,conflict_clause)
                             : analyze_univ(qlev,trail,bt_qlev,conflict_clause);
 }
@@ -182,11 +187,28 @@ bool Qesto::analyze_exists(size_t qlev,const vec<Lit>& trail,
   assert(level_type(qlev-1)==UNIVERSAL);
   assert(level_type(qlev-2)==EXISTENTIAL);
   bt_qlev=qlev-2;
+  if(verb>=2)std::cerr<<"bt_qlev:"<<bt_qlev<<std::endl;
+  vector<bool> sat_cl_afterbt(fla.cnf.size(),false);
+  for(size_t lev=bt_qlev+1;lev<qlev;++lev) {
+    for(size_t clause_index=0;clause_index<fla.cnf.size();++clause_index){
+      if (sat_cl_afterbt[clause_index]) continue;
+      FOR_EACH(li,fla.cnf[clause_index]) {
+        const Lit l=*li;
+        const auto llev=levs.qlev(l);
+        if(llev!=lev) continue;
+        if(eval(l,abstractions[lev].model)==l_True) {
+          sat_cl_afterbt[clause_index]=true;
+          break;
+        }
+      }
+    }
+  }
   const auto& abstraction_conflict=abstractions[qlev].conflict;
   for(int i=0;i<abstraction_conflict.size();++i) {
     const Lit l=abstraction_conflict[i];
     const auto vi=get_info(var(l));
     if(!sign(l)) continue;
+    if(sat_cl_afterbt[vi.clause_index]) continue;
     conflict_clause.push(~mkLit(s(bt_qlev,vi.clause_index)));
   }
   return true;
@@ -213,8 +235,8 @@ bool Qesto::analyze_univ(size_t qlev,const vec<Lit>& trail,
     }
     abstraction_conflict.push(mkLit(s(lql,vi.clause_index)));
   }
-  std::cerr<<"abstraction_conflict0:"<<abstraction_conflict0<<std::endl;
-  std::cerr<<"abstraction_conflict:"<<abstraction_conflict<<std::endl;
+  if(verb>3)std::cerr<<"abstraction_conflict0:"<<abstraction_conflict0<<std::endl;
+  if(verb>3)std::cerr<<"abstraction_conflict:"<<abstraction_conflict<<std::endl;
   bool all_opponent=true;
   bt_qlev=0;
   for(int i=0;i<abstraction_conflict.size();++i) {
@@ -226,7 +248,7 @@ bool Qesto::analyze_univ(size_t qlev,const vec<Lit>& trail,
     if(vi.qlev>bt_qlev) bt_qlev=vi.qlev;
   }
   if(all_opponent) return false;
-  std::cerr<<"bt_qlev:"<<bt_qlev<<std::endl;
+  if(verb>=2)std::cerr<<"bt_qlev:"<<bt_qlev<<std::endl;
   for(int i=0;i<abstraction_conflict.size();++i) {
     const Lit l=abstraction_conflict[i];
     const auto vi=get_info(var(l));
@@ -251,7 +273,7 @@ void Qesto::init_abstractions() {
   for(size_t qlev=0;qlev<=fla.pref.size();++qlev){
     abstractions[qlev].new_variables(maxv);
     for(size_t clause_index=0;clause_index<fla.cnf.size();++clause_index){
-      const Var v=abstractions[qlev].newVar();
+      const Var v=abstractions[qlev].newVar(level_type(qlev)==EXISTENTIAL);
       maxv=v;
       const size_t index=qlev*(fla.cnf.size())+clause_index;
       svars[index]=v;
@@ -281,6 +303,9 @@ inline QuantifierType level_type(size_t qlev) {
   assert(qlev<=fla.pref.size());
   return qlev<fla.pref.size() ? levs.level_type(qlev) : UNIVERSAL;
 }
+
+<<public members>>=
+inline size_t get_btcount() const { return bt_count; }
 
 <<c includes>>=
 #include <unordered_set>

@@ -39,7 +39,8 @@ endif
 CFLAGS += -Wall -DBUILDDATE='"$(BUILDDATE)"' -DDISTDATE='"$(DISTDATE)"'
 CFLAGS += -DCHANGESET='"$(CHANGESET)"' -DRELDATE='"$(RELDATE)"'
 CFLAGS+=-D __STDC_LIMIT_MACROS -D __STDC_FORMAT_MACROS -Wno-parentheses -Wno-deprecated -D _MSC_VER
-CFLAGS+=-std=c++11
+#CFLAGS+=-std=c++11
+CFLAGS+=-std=c++0x
 CFLAGS+=-MMD
 LIBS+=-lz
 CFLAGS+=-I./generated
@@ -81,7 +82,7 @@ NW_FILTER=-filter C++.filter
 
 all:
 	make sources
-	make doc
+#	make doc
 	make qesto
 
 qesto:  $(COBJS) $(EXTERNAL)

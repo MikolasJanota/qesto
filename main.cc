@@ -64,12 +64,14 @@ int main(int argc, char** argv) {
   ps=new Qesto(options,qf);
   const bool r=ps->solve();
   std::cout<<"s cnf "<<(r?'1':'0')<<std::endl;
+  std::cout<<"c bt_count: "<<ps->get_btcount()<<std::endl;
   return r ? 10 : 20;
 }
 
 static void SIG_handler(int signum) {
-  cerr << "# received external signal " << signum << endl;
-  cerr << "Terminating ..." << endl;
+  cerr<<"# received external signal " << signum << endl;
+  cerr<<"c bt_count: "<<ps->get_btcount()<<std::endl;
+  cerr<<"Terminating ..." << endl;
   exit(0);
 }
 
