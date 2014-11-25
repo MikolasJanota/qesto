@@ -172,26 +172,46 @@ bool Qesto::analyze(size_t qlev,const vec<Lit>& trail,
                     size_t& bt_qlev,vec<Lit>& conflict_clause) {
   QuantifierType loser=level_type(qlev);
   std::cerr<<"loser:"<<loser<<std::endl;
+  return loser==EXISTENTIAL ? analyze_exists(qlev,trail,bt_qlev,conflict_clause)
+                            : analyze_univ(qlev,trail,bt_qlev,conflict_clause);
+}
+bool Qesto::analyze_exists(size_t qlev,const vec<Lit>& trail,
+                          size_t& bt_qlev,vec<Lit>& conflict_clause) {
+  assert(level_type(qlev)==EXISTENTIAL);
+  if(qlev<2) return false;
+  assert(level_type(qlev-1)==UNIVERSAL);
+  assert(level_type(qlev-2)==EXISTENTIAL);
+  bt_qlev=qlev-2;
+  const auto& abstraction_conflict=abstractions[qlev].conflict;
+  for(int i=0;i<abstraction_conflict.size();++i) {
+    const Lit l=abstraction_conflict[i];
+    const auto vi=get_info(var(l));
+    if(!sign(l)) continue;
+    conflict_clause.push(~mkLit(s(bt_qlev,vi.clause_index)));
+  }
+  return true;
+}
+
+bool Qesto::analyze_univ(size_t qlev,const vec<Lit>& trail,
+                    size_t& bt_qlev,vec<Lit>& conflict_clause) {
+  assert(level_type(qlev)==UNIVERSAL);
   const auto& abstraction_conflict0=abstractions[qlev].conflict;
   vec<Lit> abstraction_conflict;
   for(int i=0;i<abstraction_conflict0.size();++i) {
     const Lit l=abstraction_conflict0[i];
     const auto vi=get_info(var(l));
-    if(!sign(l)) {
-      int i=trail.size();
-      size_t lql=vi.qlev;
-      while(i) {
-        --i;
-        const Lit tl=trail[i];
-        const auto tli=get_info(var(tl));
-        if(tli.clause_index==vi.clause_index
-          &&sign(tl)
-          &&tli.qlev<lql) lql=tli.qlev;
-      }
-      abstraction_conflict.push(mkLit(s(lql,vi.clause_index)));
-    } else {
-      abstraction_conflict.push(l);
+    if(sign(l)) continue;
+    int j=trail.size();
+    size_t lql=vi.qlev;
+    while(j) {
+      --j;
+      const Lit tl=trail[j];
+      const auto tli=get_info(var(tl));
+      if(tli.clause_index==vi.clause_index
+        &&sign(tl)
+        &&tli.qlev<lql) lql=tli.qlev;
     }
+    abstraction_conflict.push(mkLit(s(lql,vi.clause_index)));
   }
   std::cerr<<"abstraction_conflict0:"<<abstraction_conflict0<<std::endl;
   std::cerr<<"abstraction_conflict:"<<abstraction_conflict<<std::endl;
@@ -200,11 +220,9 @@ bool Qesto::analyze(size_t qlev,const vec<Lit>& trail,
   for(int i=0;i<abstraction_conflict.size();++i) {
     const Lit l=abstraction_conflict[i];
     const auto vi=get_info(var(l));
-    if((loser==EXISTENTIAL)!=sign(l)) continue;
-    if(level_type(vi.qlev)!=loser) continue;
+    assert(!sign(l));
+    if(level_type(vi.qlev)!=UNIVERSAL) continue;
     all_opponent=false;
-    //std::cerr<<"l:"<<l<<std::endl;
-    //std::cerr<<"vi.qlev:"<<vi.qlev<<std::endl;
     if(vi.qlev>bt_qlev) bt_qlev=vi.qlev;
   }
   if(all_opponent) return false;
@@ -212,69 +230,13 @@ bool Qesto::analyze(size_t qlev,const vec<Lit>& trail,
   for(int i=0;i<abstraction_conflict.size();++i) {
     const Lit l=abstraction_conflict[i];
     const auto vi=get_info(var(l));
-    if((loser==EXISTENTIAL)!=sign(l)) continue;
+    assert(!sign(l));
+    //if(level_type(vi.qlev)!=loser) continue;
     if(vi.qlev>bt_qlev) continue;
     conflict_clause.push(mkLit(s(bt_qlev,vi.clause_index),sign(l)));
   }
   return true;
-//  if(loser==UNIVERSAL) {
-//    <<analyze universal>>
-//  } else {
-//    <<analyze existential>>
-//  }
 }
-
-<<analyze universal>>=
-//vector<bool> old_selected(fla.cnf.size(),false);;
-//vector<bool> new_deselected(fla.cnf.size(),false);;
-//for(int i=0;i<trail.size();++i) {
-//  const Lit l=trail[i];
-//  const auto vi=get_info(var(l));
-//  if(vi.qlev<=bt_qlev&&!sign(l))
-//    old_selected[vi.clause_index]=true;
-//}
-//for(int i=0;i<abstraction_conflict.size();++i) {
-//  const Lit l=abstraction_conflict[i];
-//  const auto vi=get_info(var(l));
-//  if(vi.qlev<=bt_qlev&&!sign(l)) {
-//  }
-//  if(vi.qlev>=bt_qlev&&!sign(l)) {
-//    if(loser==EXISTENTIAL) {
-//        conflict_clause.push(~mkLit(s(bt_qlev,vi.clause_index)));
-//      } else {
-//        assert(sign(l));
-//        deselected[vi.clause_index]=true;
-//      }
-//    }
-//  }
-
-<<analyze existential>>=
-//  vector<bool> old_selecd(fla.cnf.size(),false);;
-//  vector<bool> deselected(fla.cnf.size(),false);;
-//  for(int i=0;i<abstraction_conflict.size();++i) {
-//    const Lit l=abstraction_conflict[i];
-//    const auto vi=get_info(var(l));
-//    if(sign(l)==(loser==UNIVERSAL)) continue;
-//    if(vi.qlev<=bt_qlev) {
-//      conflict_clause.push(l);
-//    }else {
-//      if(loser==EXISTENTIAL) {
-//        conflict_clause.push(~mkLit(s(bt_qlev,vi.clause_index)));
-//      } else {
-//        assert(sign(l));
-//        deselected[vi.clause_index]=true;
-//      }
-//    }
-//  }
-//  if(loser==UNIVERSAL) {
-//    for(size_t clause_index=0;clause_index<fla.cnf.size();++clause_index){
-//      if(deselected[clause_index])
-//        conflict_clause.push(mkLit(s(bt_qlev,clause_index)));
-//    }
-//  }
-//  return true;
-//}
-//
 
 <<private members>>=
 vector<Var> svars;
@@ -340,4 +302,6 @@ using SATSPC::Lit;
 <<private methods>>=
 void init();
 bool analyze(size_t qlev,const vec<Lit>& trail,size_t& bt_qlev,vec<Lit>& conflict_clause);
+bool analyze_univ(size_t qlev,const vec<Lit>& trail,size_t& bt_qlev,vec<Lit>& conflict_clause);
+bool analyze_exists(size_t qlev,const vec<Lit>& trail,size_t& bt_qlev,vec<Lit>& conflict_clause);
 void init_abstractions();
