@@ -64,6 +64,9 @@ void Qesto::init(){
   init_abstractions();
   <<init svars>>
   <<init game rules>>
+  if(opt.get_ex_inst()){
+    inst_e();
+  }
 }
 
 @ The invariant for variables $s_k^C$ is that an abstraction at level $m$ can
@@ -243,20 +246,23 @@ bool Qesto::analyze_univ(size_t qlev,const vec<Lit>& trail,
   return true;
 }
 
-@ For the current clause we compute what is the highest qualification level of
-a satisfied existential literal (and store it into [[ex_maxlev[i]]]).
+@ For the current clause we compute what the highest qualification level of
+a satisfied existential literal \emph{before} the conflict quantification level.
+We store this value into [[ex_maxlev[i]]] (it stays [[-1]] if no ex.\ lit satisfies the clause).
 Concurrently we compute the highest quantification level of a universal
-literal (and store it into [[uni_satlev]]).  if a clause is satisfied only by
-universal literals, the maximal quantification level of those is used to
-update the backtracking level (only such clauses can be enforced by the
+literal (and store it into [[uni_satlev]]).  If a clause is satisfied only by
+universal literals and lits after the conflict lev,
+the maximal quantification level of the satisifying universal is used to
+update the backtracking level (because only such clauses can be enforced by the
 universal player).
 <<update max levels>>=
 int uni_satlev=-1;
 FOR_EACH(j,fla.cnf[clause_index]) {
   const Lit l=*j;
+  const size_t l_qlx=(levs.qlev(l));
   const int l_ql=(int)(levs.qlev(l));
   assert(l_ql>=0);
-  if(l_ql>qlev //ignore lits after conflict
+  if(l_qlx>qlev //ignore lits after conflict
      || eval(l,abstractions[l_ql].model)!=l_True)//ignore false lits
     continue;
   if(levs.type(l)==EXISTENTIAL) {
@@ -270,6 +276,43 @@ if(ex_maxlev[i]<0) {
   all_opponent=false;
   if (all_opponent||uni_satlev>(int)bt_qlev) {
       bt_qlev=(size_t)uni_satlev;
+  }
+}
+
+<<implementation>>=
+void Qesto::inst_e(){
+  vec<Lit> ls;
+  for(size_t ql=0; ql<fla.pref.size(); ++ql){
+    if(level_type(ql)!=EXISTENTIAL) continue;
+    FOR_EACH(i,fla.cnf){
+      auto& cl=*i;
+      size_t mel=0;
+      bool taut=false;
+      ls.clear();
+      FOR_EACH(k,cl){
+        const Lit l=*k;
+        const auto ll=levs.qlev(l);
+        const bool isex=levs.type(l)==EXISTENTIAL;
+        if(isex){
+          if(ll>mel) mel=ll;
+        } else {
+          if(ll>ql) {
+            if(sign(l)) {
+              taut=true;
+              break;
+            } else {
+              continue;
+            }
+          }
+        }
+        ls.push(l);
+      }
+      if(taut) continue;
+      if(mel>ql) {
+        if(verb>4)std::cerr<<"eac@"<<ql<<":"<<ls<<std::endl;
+        abstractions[ql].addClause_(ls);
+      }
+    }
   }
 }
 
@@ -344,3 +387,4 @@ bool analyze(size_t qlev,const vec<Lit>& trail,size_t& bt_qlev,vec<Lit>& conflic
 bool analyze_univ(size_t qlev,const vec<Lit>& trail,size_t& bt_qlev,vec<Lit>& conflict_clause);
 bool analyze_exists(size_t qlev,const vec<Lit>& trail,size_t& bt_qlev,vec<Lit>& conflict_clause);
 void init_abstractions();
+void inst_e();
