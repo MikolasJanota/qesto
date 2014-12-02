@@ -43,14 +43,14 @@ size_t bt_count;
 , levs(fla.pref)
 , bt_count(0)
 
-@ We introduce variables $s_k^C$ which indicates that the cause $C$ is
-\emph{selected} at the quantification level $k$; if the variable is false, then we say that the
+@ We introduce variables $s_k^C$ which indicate that the clause $C$ is
+\emph{selected} at the quantification level $k$. If the variable is false, then we say that the
 clause is \emph{deselected}.
 <<private methods>>=
 Var s(size_t quant_level,size_t clause_index);
 
-@ For each  quantification level, we need a SAT solver, which stores the abstraction
-for that level. To obtain a more uniform implementation there is an \emph{additional
+@ For each  quantification level, we create a SAT solver, which stores the abstraction
+for that level. To obtain a more uniform implementation, there is an \emph{additional
   level} representing the universal player.
 <<private members>>=
 SATSPC::MiniSatExt* abstractions;
@@ -58,12 +58,15 @@ SATSPC::MiniSatExt* abstractions;
 , abstractions(new SATSPC::MiniSatExt[fla.pref.size()+1])
 
 
-@ The abstractions must be initialized with requirements on the $s$ variables.
+@ Before solving the abstractions must be initialized with requirements on the $s$ variables.
 <<implementation>>=
 void Qesto::init(){
   init_abstractions();
   <<init svars>>
   <<init game rules>>
+  if(opt.get_ex_inst()){
+    inst_e();
+  }
 }
 
 @ The invariant for variables $s_k^C$ is that an abstraction at level $m$ can
@@ -209,7 +212,7 @@ clauses that are deselected at the moment, and are causing the universal
 player to lose. If a clause is satisfied by the existential player, the
 universal player cannot do anything about it. So we define the backtracking
 level for the universal player as the maximum quantification level of literals
-that satisfy a clause with no true extension literals.
+that satisfy a clause with no true existential literals.
 Any clauses that are satisfied by an existential literal after the
 backtracking level can be removed from the conflict since the player can
 always replicate these moves.
@@ -243,20 +246,23 @@ bool Qesto::analyze_univ(size_t qlev,const vec<Lit>& trail,
   return true;
 }
 
-@ For the current clause we compute what is the highest qualification level of
-a satisfied existential literal (and store it into [[ex_maxlev[i]]]).
+@ For the current clause we compute what the highest qualification level of
+a satisfied existential literal \emph{before} the conflict quantification level.
+We store this value into [[ex_maxlev[i]]] (it stays [[-1]] if no ex.\ lit satisfies the clause).
 Concurrently we compute the highest quantification level of a universal
-literal (and store it into [[uni_satlev]]).  if a clause is satisfied only by
-universal literals, the maximal quantification level of those is used to
-update the backtracking level (only such clauses can be enforced by the
+literal (and store it into [[uni_satlev]]).  If a clause is satisfied only by
+universal literals and lits after the conflict lev,
+the maximal quantification level of the satisifying universal is used to
+update the backtracking level (because only such clauses can be enforced by the
 universal player).
 <<update max levels>>=
 int uni_satlev=-1;
 FOR_EACH(j,fla.cnf[clause_index]) {
   const Lit l=*j;
+  const size_t l_qlx=(levs.qlev(l));
   const int l_ql=(int)(levs.qlev(l));
   assert(l_ql>=0);
-  if(l_ql>qlev //ignore lits after conflict
+  if(l_qlx>qlev //ignore lits after conflict
      || eval(l,abstractions[l_ql].model)!=l_True)//ignore false lits
     continue;
   if(levs.type(l)==EXISTENTIAL) {
@@ -270,6 +276,43 @@ if(ex_maxlev[i]<0) {
   all_opponent=false;
   if (all_opponent||uni_satlev>(int)bt_qlev) {
       bt_qlev=(size_t)uni_satlev;
+  }
+}
+
+<<implementation>>=
+void Qesto::inst_e(){
+  vec<Lit> ls;
+  for(size_t ql=0; ql<fla.pref.size(); ++ql){
+    if(level_type(ql)!=EXISTENTIAL) continue;
+    FOR_EACH(i,fla.cnf){
+      auto& cl=*i;
+      size_t mel=0;
+      bool taut=false;
+      ls.clear();
+      FOR_EACH(k,cl){
+        const Lit l=*k;
+        const auto ll=levs.qlev(l);
+        const bool isex=levs.type(l)==EXISTENTIAL;
+        if(isex){
+          if(ll>mel) mel=ll;
+        } else {
+          if(ll>ql) {
+            if(sign(l)) {
+              taut=true;
+              break;
+            } else {
+              continue;
+            }
+          }
+        }
+        ls.push(l);
+      }
+      if(taut) continue;
+      if(mel>ql) {
+        if(verb>4)std::cerr<<"eac@"<<ql<<":"<<ls<<std::endl;
+        abstractions[ql].addClause_(ls);
+      }
+    }
   }
 }
 
@@ -344,3 +387,4 @@ bool analyze(size_t qlev,const vec<Lit>& trail,size_t& bt_qlev,vec<Lit>& conflic
 bool analyze_univ(size_t qlev,const vec<Lit>& trail,size_t& bt_qlev,vec<Lit>& conflict_clause);
 bool analyze_exists(size_t qlev,const vec<Lit>& trail,size_t& bt_qlev,vec<Lit>& conflict_clause);
 void init_abstractions();
+void inst_e();
