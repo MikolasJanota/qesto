@@ -70,7 +70,7 @@ int main(int argc, char** argv) {
 
 static void SIG_handler(int signum) {
   cerr<<"# received external signal " << signum << endl;
-  cerr<<"c bt_count: "<<ps->get_btcount()<<std::endl;
+  if(ps){cerr<<"c bt_count: "<<ps->get_btcount()<<std::endl;}
   cerr<<"Terminating ..." << endl;
   exit(0);
 }
