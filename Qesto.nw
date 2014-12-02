@@ -153,6 +153,7 @@ bool Qesto::solve() {
            for(size_t clause_index=0;clause_index<fla.cnf.size();++clause_index)
              trail.pop();
          } while (qlev>bt_qlev);
+         if(verb>3)std::cerr<<"cc: "<<conflict_clause<<std::endl;
          abstractions[bt_qlev].addClause_(conflict_clause);
        }
     }
@@ -177,7 +178,7 @@ SInfo get_info(Var s) const;
 bool Qesto::analyze(size_t qlev,const vec<Lit>& trail,
                     size_t& bt_qlev,vec<Lit>& conflict_clause) {
   QuantifierType loser=level_type(qlev);
-  if(verb>=2)std::cerr<<"analyse loser:"<<loser<<std::endl;
+  if(verb>=2)std::cerr<<"analyse loser:"<<loser<<"@"<<qlev<<std::endl;
   return loser==EXISTENTIAL ? analyze_exists(qlev,trail,bt_qlev,conflict_clause)
                             : analyze_univ(qlev,trail,bt_qlev,conflict_clause);
 }
@@ -212,6 +213,8 @@ that satisfy a clause with no true extension literals.
 Any clauses that are satisfied by an existential literal after the
 backtracking level can be removed from the conflict since the player can
 always replicate these moves.
+<<private members>>=
+vector<int> ex_maxlev;// maximum lev of satisfying ex lit
 <<implementation>>=
 bool Qesto::analyze_univ(size_t qlev,const vec<Lit>& trail,
                     size_t& bt_qlev,vec<Lit>& conflict_clause) {
@@ -220,8 +223,8 @@ bool Qesto::analyze_univ(size_t qlev,const vec<Lit>& trail,
   if(verb>3)std::cerr<<"abstraction_conflict:"<<abstraction_conflict<<std::endl;
   bt_qlev=-1;
   const auto sz=abstraction_conflict.size();
+  ex_maxlev.assign(sz,-1);
   bool all_opponent=true;
-  vector<int> ex_maxlev(sz,-1);// maximum lev of satisfying ex lit
   for(int i=0;i<sz;++i) {//analyze each clause in the core
     const Lit conflict_lit=abstraction_conflict[i];
     if(sign(conflict_lit)) continue;
@@ -230,9 +233,9 @@ bool Qesto::analyze_univ(size_t qlev,const vec<Lit>& trail,
   }
   if(all_opponent) return false;
   if(verb>=2)std::cerr<<"bt_qlev:"<<bt_qlev<<std::endl;
-  for(int i=0;i<abstraction_conflict.size();++i) {
+  for(int i=0;i<sz;++i) {
     const Lit l=abstraction_conflict[i];
-    assert(!sign(l));
+    if(sign(l)) continue;
     const auto vi=get_info(var(l));
     if(ex_maxlev[i]<=(int)bt_qlev)
       conflict_clause.push(mkLit(s(bt_qlev,vi.clause_index)));
@@ -251,10 +254,11 @@ universal player).
 int uni_satlev=-1;
 FOR_EACH(j,fla.cnf[clause_index]) {
   const Lit l=*j;
-  if(eval(l,abstractions[levs.qlev(l)].model)!=l_True)
-    continue;//focus only on the satisfied literals
   const int l_ql=(int)(levs.qlev(l));
   assert(l_ql>=0);
+  if(l_ql>qlev //ignore lits after conflict
+     || eval(l,abstractions[l_ql].model)!=l_True)//ignore false lits
+    continue;
   if(levs.type(l)==EXISTENTIAL) {
     if(l_ql>ex_maxlev[i]) ex_maxlev[i]=l_ql;
   } else {
