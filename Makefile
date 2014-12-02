@@ -17,8 +17,12 @@ CC=g++
 CFLAGS+=-I.
 
 ifdef PROF
+CFLAGS+=-fprofile-arcs -ftest-coverage
 CFLAGS+=-pg
+CFLAGS+=-g
+LNFLAGS+=-fprofile-arcs
 LNFLAGS+=-pg
+LNFLAGS+=-g
 endif
 
 ifdef DBG
