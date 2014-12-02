@@ -82,7 +82,7 @@ NW_FILTER=-filter C++.filter
 
 all:
 	make sources
-#	make doc
+	make doc
 	make qesto
 
 qesto:  $(COBJS) $(EXTERNAL)

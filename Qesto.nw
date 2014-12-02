@@ -43,14 +43,14 @@ size_t bt_count;
 , levs(fla.pref)
 , bt_count(0)
 
-@ We introduce variables $s_k^C$ which indicates that the cause $C$ is
-\emph{selected} at the quantification level $k$; if the variable is false, then we say that the
+@ We introduce variables $s_k^C$ which indicate that the clause $C$ is
+\emph{selected} at the quantification level $k$. If the variable is false, then we say that the
 clause is \emph{deselected}.
 <<private methods>>=
 Var s(size_t quant_level,size_t clause_index);
 
-@ For each  quantification level, we need a SAT solver, which stores the abstraction
-for that level. To obtain a more uniform implementation there is an \emph{additional
+@ For each  quantification level, we create a SAT solver, which stores the abstraction
+for that level. To obtain a more uniform implementation, there is an \emph{additional
   level} representing the universal player.
 <<private members>>=
 SATSPC::MiniSatExt* abstractions;
@@ -58,7 +58,7 @@ SATSPC::MiniSatExt* abstractions;
 , abstractions(new SATSPC::MiniSatExt[fla.pref.size()+1])
 
 
-@ The abstractions must be initialized with requirements on the $s$ variables.
+@ Before solving the abstractions must be initialized with requirements on the $s$ variables.
 <<implementation>>=
 void Qesto::init(){
   init_abstractions();
@@ -208,7 +208,7 @@ clauses that are deselected at the moment, and are causing the universal
 player to lose. If a clause is satisfied by the existential player, the
 universal player cannot do anything about it. So we define the backtracking
 level for the universal player as the maximum quantification level of literals
-that satisfy a clause with no true extension literals.
+that satisfy a clause with no true existential literals.
 Any clauses that are satisfied by an existential literal after the
 backtracking level can be removed from the conflict since the player can
 always replicate these moves.
