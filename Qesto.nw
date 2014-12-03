@@ -5,6 +5,7 @@
 <<public members>>=
 Qesto(const Options& opt, const QFla& fla);
 bool solve();
+lbool solve(size_t confl_budget);
 
 <<Qesto.hh>>=
 #ifndef QESTO_NW_3930
@@ -35,13 +36,13 @@ const Options& opt;
 const QFla& fla;
 const size_t verb;
 LevelInfo levs;
-size_t bt_count;
+size_t tot_bt_count;
 <<fields init>>=
 : opt(opt)
 , fla(fla)
 , verb(opt.get_verbose())
 , levs(fla.pref)
-, bt_count(0)
+, tot_bt_count(0)
 
 @ We introduce variables $s_k^C$ which indicate that the clause $C$ is
 \emph{selected} at the quantification level $k$. If the variable is false, then we say that the
@@ -127,11 +128,11 @@ additional universal level at the end of the prefix. The backtracking is not
 necessarily by 1 quantification level since we analyze the source of
 unsatisfiablity (in principle similar to conflict analysis).
 <<implementation>>=
-bool Qesto::solve() {
+lbool Qesto::solve(size_t confl_budget) {
   size_t qlev=0;
   vec<Lit> conflict_clause;
   vec<Lit> trail;
-  while (1) {
+  while (!opt.get_luby_rest()||confl_budget--) {
     assert(qlev<=fla.pref.size());
     const bool sat=abstractions[qlev].solve(trail);
     if(sat) {
@@ -142,13 +143,13 @@ bool Qesto::solve() {
       }
       ++qlev;
     } else {//attempt conflict resolution
-       ++bt_count;
+       ++tot_bt_count;
        conflict_clause.clear();
        size_t bt_qlev=-1;
        const bool resolved=analyze(qlev,trail,/*out*/bt_qlev,/*out*/conflict_clause);
        if(!resolved) {
          //formula true iff universal lost
-         return level_type(qlev)==UNIVERSAL;
+         return level_type(qlev)==UNIVERSAL?l_True:l_False;
        } else {
          assert(qlev>bt_qlev);
          do{
@@ -161,8 +162,23 @@ bool Qesto::solve() {
        }
     }
   }
-  assert(0);
-  return false;
+  if(verb>1)std::cerr<<"restart "<<tot_bt_count<<std::endl;
+  return l_Undef;
+}
+
+<<implementation>>=
+bool Qesto::solve() {
+  int curr_restarts = 0;
+  lbool status=l_Undef;
+  const double restart_inc=1.5;
+  const int restart_first=100;
+  while(status==l_Undef){
+    const double rest_base = luby(restart_inc, curr_restarts);
+    status = solve(rest_base * restart_first);
+    curr_restarts++;
+  }
+  assert(status!=l_Undef);
+  return status==l_True;
 }
 
 @ During the  conflict analysis we will also need a mapping from $s^k_C$ variables
@@ -181,7 +197,7 @@ SInfo get_info(Var s) const;
 bool Qesto::analyze(size_t qlev,const vec<Lit>& trail,
                     size_t& bt_qlev,vec<Lit>& conflict_clause) {
   QuantifierType loser=level_type(qlev);
-  if(verb>=2)std::cerr<<"analyse loser:"<<loser<<"@"<<qlev<<std::endl;
+  if(verb>2)std::cerr<<"analyse loser:"<<loser<<"@"<<qlev<<std::endl;
   return loser==EXISTENTIAL ? analyze_exists(qlev,trail,bt_qlev,conflict_clause)
                             : analyze_univ(qlev,trail,bt_qlev,conflict_clause);
 }
@@ -196,7 +212,7 @@ bool Qesto::analyze_exists(size_t qlev,const vec<Lit>& trail,
   assert(level_type(qlev)==EXISTENTIAL);
   if(qlev<2) return false;
   bt_qlev=qlev-2;
-  if(verb>=2)std::cerr<<"bt_qlev:"<<bt_qlev<<std::endl;
+  if(verb>2)std::cerr<<"bt_qlev:"<<bt_qlev<<std::endl;
   const auto& abstraction_conflict=abstractions[qlev].conflict;
   for(int i=0;i<abstraction_conflict.size();++i) {
     const Lit l=abstraction_conflict[i];
@@ -235,7 +251,7 @@ bool Qesto::analyze_univ(size_t qlev,const vec<Lit>& trail,
     <<update max levels>>
   }
   if(all_opponent) return false;
-  if(verb>=2)std::cerr<<"bt_qlev:"<<bt_qlev<<std::endl;
+  if(verb>2)std::cerr<<"bt_qlev:"<<bt_qlev<<std::endl;
   for(int i=0;i<sz;++i) {
     const Lit l=abstraction_conflict[i];
     if(sign(l)) continue;
@@ -361,7 +377,7 @@ inline QuantifierType level_type(size_t qlev) {
 }
 
 <<public members>>=
-inline size_t get_btcount() const { return bt_count; }
+inline size_t get_btcount() const { return tot_bt_count; }
 
 <<c includes>>=
 #include <unordered_set>

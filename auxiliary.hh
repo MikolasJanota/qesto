@@ -68,5 +68,6 @@ inline std::ostream& make_indent(std::ostream& output_stream, size_t indent) {
   return output_stream;
 }
 
+double luby(double y, int x);
 #endif	/* AUXILIARY_HH */
 

@@ -1,6 +1,8 @@
 *~
 *.o
 *.d
+qesto
+qesto.exe
 DataStructures.aux
 DataStructures.fdb_latexmk
 DataStructures.fls

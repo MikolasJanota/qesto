@@ -115,6 +115,7 @@ def main():
   options.add_short_non_arg_option('use_varsplit','-t','use var splitter')
   options.add_short_non_arg_option('use_dismcs','-d','use disjoint MCSes')
   options.add_short_non_arg_option('ex_inst','-e','use existential instantiation')
+  options.add_short_non_arg_option('luby_rest','-l','use luby restarts')
 ###
   generate(options, sys.stdout, sys.stderr)
 
