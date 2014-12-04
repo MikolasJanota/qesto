@@ -68,6 +68,12 @@ void Qesto::init(){
   if(opt.get_ex_inst()){
     inst_e();
   }
+  if(opt.get_resdep()) {
+    for(size_t ql=0;ql<=fla.pref.size();++ql){
+      if(level_type(ql)==UNIVERSAL)
+        encode_resdep(ql); // encode resolution dependencies
+    }
+  }
 }
 
 @ The invariant for variables $s_k^C$ is that an abstraction at level $m$ can
@@ -344,6 +350,51 @@ void Qesto::inst_e(){
   }
 }
 
+<<implementation>>=
+void Qesto::encode_resdep(size_t qlev){
+  assert(level_type(qlev)==UNIVERSAL);
+  std::cerr<<"encode_resdep()"<<std::endl;
+  ClausesInversion inv(fla.cnf);
+  LitBitSet current_clause;
+  for(size_t clause_index=0;clause_index<fla.cnf.size();++clause_index){
+    const auto& cl=fla.cnf[clause_index];
+    current_clause.clear();
+    FOR_EACH(li,cl) {
+      const Lit l=*li;
+      if(levs.qlev(l)>qlev) continue;
+      current_clause.add(l);
+    }
+    FOR_EACH(li,cl) {
+       const Lit l=*li;
+       if(levs.type(l)!=EXISTENTIAL) continue;
+       if(levs.qlev(l)<qlev) continue;
+       vec<Lit> cond;
+       cond.push(~mkLit(s(qlev,clause_index)));
+       FOR_EACH(ocii,inv[~l]) {
+          const auto other_cl_idx=*ocii;
+          const LitSet& ocl=fla.cnf[other_cl_idx];
+          //std::cerr<<"ocl:"<<ocl<<std::endl;
+          bool found=false;
+          bool taut=false;
+          FOR_EACH(oli,ocl) {
+            const Lit ol=*oli;
+            if(ol==~l) {
+              found=true;
+              continue;
+            }
+            if(current_clause.get(~ol)) {
+              taut=true;
+            }
+          }
+          if(!found&&!taut)assert(0);
+          if(!taut) cond.push(mkLit(s(qlev,other_cl_idx)));
+       }
+       abstractions[qlev].addClause_(cond);
+    }
+  }
+  std::cerr<<"end encode_resdep()"<<std::endl;
+}
+
 <<private members>>=
 vector<Var> svars;
 vector<SInfo> infos;
@@ -395,6 +446,8 @@ inline size_t get_btcount() const { return tot_bt_count; }
 <<c includes>>=
 #include <unordered_set>
 #include "Qesto.hh"
+#include "ClausesInversion.hh"
+#include "LitBitSet.hh"
 using std::max;
 using std::min;
 using std::make_pair;
@@ -417,3 +470,4 @@ bool analyze_univ(size_t qlev,const vec<Lit>& trail,size_t& bt_qlev,vec<Lit>& co
 bool analyze_exists(size_t qlev,const vec<Lit>& trail,size_t& bt_qlev,vec<Lit>& conflict_clause);
 void init_abstractions();
 void inst_e();
+void encode_resdep(size_t qlev);
