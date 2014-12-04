@@ -305,9 +305,11 @@ FOR_EACH(j,fla.cnf[clause_index]) {
     if(l_ql>uni_satlev) uni_satlev=l_ql;
   }
 }
-//assert(opt.get_dir1_enc() || uni_satlev>=0 || ex_maxlev[i]>=0);
-assert(uni_satlev>=0||ex_maxlev[i]>=0);//depends on SAT solver
+assert(opt.get_dir1_enc() || uni_satlev>=0 || ex_maxlev[i]>=0);
+//assert(uni_satlev>=0||ex_maxlev[i]>=0);//depends on SAT solver
 if(ex_maxlev[i]<0) {
+  if(uni_satlev<0) uni_satlev=qlev-2;
+  assert(uni_satlev>=0);
   if(all_opponent||uni_satlev>(int)bt_qlev)
     bt_qlev=(size_t)uni_satlev;
   all_opponent=false;
