@@ -85,9 +85,21 @@ for(size_t clause_index=0;clause_index<fla.cnf.size();++clause_index){
   }
   for(size_t qlev=0;qlev<=fla.pref.size();++qlev){
     if(qlev) level_lits[qlev].push_back(mkLit(s(qlev-1,clause_index)));
-    encode_and(abstractions[qlev],
-               mkLit(s(qlev,clause_index)),
-               level_lits[qlev]);
+    if(opt.get_dir1_enc()) {
+      if(level_type(qlev)==EXISTENTIAL) {
+        encode_and_neg(abstractions[qlev],
+            mkLit(s(qlev,clause_index)),
+            level_lits[qlev]);
+      } else {
+        encode_and_pos(abstractions[qlev],
+            mkLit(s(qlev,clause_index)),
+            level_lits[qlev]);
+      }
+    } else {
+      encode_and(abstractions[qlev],
+          mkLit(s(qlev,clause_index)),
+          level_lits[qlev]);
+    }
   }
 }
 
@@ -287,12 +299,12 @@ FOR_EACH(j,fla.cnf[clause_index]) {
     if(l_ql>uni_satlev) uni_satlev=l_ql;
   }
 }
-assert(uni_satlev>=0 || ex_maxlev[i]>=0);
+//assert(opt.get_dir1_enc() || uni_satlev>=0 || ex_maxlev[i]>=0);
+assert(uni_satlev>=0||ex_maxlev[i]>=0);//depends on SAT solver
 if(ex_maxlev[i]<0) {
+  if(all_opponent||uni_satlev>(int)bt_qlev)
+    bt_qlev=(size_t)uni_satlev;
   all_opponent=false;
-  if (all_opponent||uni_satlev>(int)bt_qlev) {
-      bt_qlev=(size_t)uni_satlev;
-  }
 }
 
 <<implementation>>=
@@ -343,6 +355,7 @@ void Qesto::init_abstractions() {
   svars.resize(mqlev*fla.cnf.size(),-1);
   infos.resize(mqlev*fla.cnf.size());
   for(size_t qlev=0;qlev<=fla.pref.size();++qlev){
+    if(opt.get_dir1_enc()) abstractions[qlev].phase_saving=0;
     abstractions[qlev].new_variables(maxv);
     for(size_t clause_index=0;clause_index<fla.cnf.size();++clause_index){
       const Var v=abstractions[qlev].newVar(level_type(qlev)==EXISTENTIAL);

@@ -55,6 +55,23 @@ inline void to_lits(const vec<lbool>& bv, vec<Lit>& output, int s, const int e) 
   }
 }
 
+// representative -> AND l_i
+inline void
+encode_and_pos(SATSPC::MiniSatExt& solver,Lit representative, const vector<Lit>& rhs) {
+  for(size_t i=0;i<rhs.size();++i)
+    solver.addClause(~representative,rhs[i]);
+}
+
+// AND l_i -> representative
+inline void
+encode_and_neg(SATSPC::MiniSatExt& solver,Lit representative, const vector<Lit>& rhs) {
+  vec<Lit> ls(rhs.size()+1);
+  for(size_t i=0;i<rhs.size();++i)
+    ls[i]=~rhs[i];
+  ls[rhs.size()]=representative;
+  solver.addClause_(ls);
+}
+
 inline void
 encode_and(SATSPC::MiniSatExt& solver,Lit representative, const vector<Lit>& rhs) {
   vec<Lit> ls(rhs.size()+1);
