@@ -256,6 +256,7 @@ vector<int> ex_maxlev;// maximum lev of satisfying ex lit
 bool Qesto::analyze_univ(size_t qlev,const vec<Lit>& trail,
                     size_t& bt_qlev,vec<Lit>& conflict_clause) {
   assert(level_type(qlev)==UNIVERSAL);
+  if(qlev<2) return false;
   const auto& abstraction_conflict=abstractions[qlev].conflict;
   if(verb>3)std::cerr<<"abstraction_conflict:"<<abstraction_conflict<<std::endl;
   bt_qlev=-1;
@@ -352,10 +353,15 @@ void Qesto::inst_e(){
   }
 }
 
+<<private members>>=
+size_t rescount;
+<<fields init>>=
+,rescount(0)
+
 <<implementation>>=
 void Qesto::encode_resdep(size_t qlev){
   assert(level_type(qlev)==UNIVERSAL);
-  std::cerr<<"encode_resdep()"<<std::endl;
+  //std::cerr<<"encode_resdep()"<<std::endl;
   ClausesInversion inv(fla.cnf);
   LitBitSet current_clause;
   for(size_t clause_index=0;clause_index<fla.cnf.size();++clause_index){
@@ -392,9 +398,11 @@ void Qesto::encode_resdep(size_t qlev){
           if(!taut) cond.push(mkLit(s(qlev,other_cl_idx)));
        }
        abstractions[qlev].addClause_(cond);
+       ++rescount;
     }
   }
-  std::cerr<<"end encode_resdep()"<<std::endl;
+  //std::cerr<<"end encode_resdep()"<<std::endl;
+  if(verb>1)std::cerr<<"rescount:"<<rescount<<std::endl;
 }
 
 <<private members>>=
