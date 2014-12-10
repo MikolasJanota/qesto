@@ -8,10 +8,12 @@
 #include "ReadQ.hh"
 #include "Options.hh"
 #include "Qesto.hh"
+#include "QestoGroups.hh"
 using namespace std;
 static void SIG_handler(int signum);
 ostream& print_usage(const Options& options,ostream& o);
 Qesto* ps=NULL;
+QestoGroups* gps=NULL;
 
 int main(int argc, char** argv) {
   signal(SIGHUP, SIG_handler);
@@ -61,16 +63,27 @@ int main(int argc, char** argv) {
   if(qf.pref.size()==0) {
     qf.pref.push_back(make_pair(EXISTENTIAL,VarVector()));
   }
-  ps=new Qesto(options,qf);
-  const bool r=ps->solve();
+  bool r;
+  std::cerr<<": "<<qf<<std::endl;
+  LevelInfo levs(qf.pref);
+  Groups grs(levs,qf);
+  if(options.get_groups()) {
+    gps=new QestoGroups(options,levs,grs);
+    r=gps->solve();
+    std::cout<<"c bt_count: "<<gps->get_btcount()<<std::endl;
+  } else {
+    ps=new Qesto(options,qf);
+    r=ps->solve();
+    std::cout<<"c bt_count: "<<ps->get_btcount()<<std::endl;
+  }
   std::cout<<"s cnf "<<(r?'1':'0')<<std::endl;
-  std::cout<<"c bt_count: "<<ps->get_btcount()<<std::endl;
   return r ? 10 : 20;
 }
 
 static void SIG_handler(int signum) {
   cerr<<"# received external signal " << signum << endl;
   if(ps){cerr<<"c bt_count: "<<ps->get_btcount()<<std::endl;}
+  if(gps){cerr<<"c bt_count: "<<gps->get_btcount()<<std::endl;}
   cerr<<"Terminating ..." << endl;
   exit(0);
 }

@@ -1,6 +1,7 @@
 *~
 *.o
 *.d
+*.stackdump
 qesto
 qesto.exe
 DataStructures.aux
@@ -21,4 +22,15 @@ Qesto.fls
 Qesto.log
 Qesto.out
 Qesto.pdf
-*.stackdump
+Groups.aux
+Groups.fdb_latexmk
+Groups.fls
+Groups.log
+Groups.out
+Groups.pdf
+QestoGroups.aux
+QestoGroups.fdb_latexmk
+QestoGroups.fls
+QestoGroups.log
+QestoGroups.out
+QestoGroups.pdf

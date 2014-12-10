@@ -1,7 +1,9 @@
 GENF=./generated/Options.cc ./generated/Options.hh\
      ./generated/DataStructures.hh\
      ./generated/LevelInfo.hh ./generated/LevelInfo.cc\
-     ./generated/Qesto.hh ./generated/Qesto.cc
+     ./generated/Groups.hh ./generated/Groups.cc\
+     ./generated/Qesto.hh ./generated/Qesto.cc\
+     ./generated/QestoGroups.hh ./generated/QestoGroups.cc
 CSRCS    = $(wildcard *.cc) $(wildcard ./generated/*.cc)
 NSRCS    = $(wildcard *.nw)
 YACC     = $(wildcard *.y)
@@ -86,7 +88,7 @@ NW_FILTER=-filter C++.filter
 
 all:
 	make sources
-	# make doc
+	make doc
 	make qesto
 
 qesto:  $(COBJS) $(EXTERNAL)

@@ -1,0 +1,155 @@
+% File:  Groups.nw
+% Author: mikolas
+% Created on: Tue, Dec 09, 2014 2:45:37 PM
+% Copyright (C) 2014, Mikolas Janota
+<<Groups.hh>>=
+#ifndef GROUPS_NW_25825
+#define GROUPS_NW_25825
+<<h includes>>
+class Groups{public:<<public members>>
+             private:<<private members>>};
+#endif
+
+<<public members>>=
+Groups(const LevelInfo& levs,const QFla& fla)
+<<fields init>>
+{
+  for(size_t index = 0; index<fla.cnf.size(); ++index)
+    add_clause(index);
+}
+
+<<public members>>=
+size_t parent(size_t gid) const;
+const vector<size_t>& groups(size_t qlev) const;
+const LitSet& lits(size_t gid) const;
+size_t qlev(size_t gid) const;
+
+<<Groups.cc>>=
+#include "Groups.hh"
+<<implementation>>
+
+<<private members>>=
+enum LitOcc {POS,NEG,NO};
+
+<<private members>>=
+struct Node {
+  Node* branches[3];
+  inline Node*& operator[](LitOcc occurrence) {
+    const auto index = (size_t)occurrence;
+    assert(index<3);
+    return branches[index];
+  }
+  inline Node() {branches[0]=NULL; branches[1]=NULL; branches[2]=NULL;}
+  size_t gid;
+};
+
+<<private members>>=
+const LevelInfo& levs;
+const QFla& fla;
+Node root;
+size_t group_count;
+vector<LitSet> gr2lits;
+vector<size_t> gr2parent;
+vector<size_t> gr2qlev;
+vector<vector<size_t> >  grouped_levels;
+
+<<fields init>>=
+:levs(levs)
+,fla(fla)
+,group_count(0)
+,grouped_levels(levs.lev_count())
+
+<<implementation>>=
+//void Groups::add_clause(const LitSet& cl){
+void Groups::add_clause(size_t clause_index) {
+  Node *node = &root;
+  LitBitSet cls;
+  FOR_EACH(li,fla.cnf[clause_index]) cls.add(*li);
+  bool is_new=false;
+  vector<Lit> current_lits;
+  size_t parent_group=group_count;
+  for(size_t ql=0;ql<fla.pref.size();++ql){
+    current_lits.clear();
+    const auto& vars=fla.pref[ql].second;
+    if(vars.empty()) {//dummy node, to destinguish levels
+      LitOcc branch=NO;
+      if ((*node)[branch]==NULL) {
+        (*node)[branch]=new Node();
+        is_new = true;
+      }
+      node = (*node)[branch];
+    }
+    else {
+      for(size_t vi=0;vi<vars.size();++vi){
+        const Lit l=mkLit(vars[vi]);
+        LitOcc branch=NO;
+        if(cls.get(l)) {
+          branch=POS;
+          current_lits.push_back(l);
+        } else if(cls.get(~l))  {
+          branch=NEG;
+          current_lits.push_back(~l);
+        }
+        if ((*node)[branch]==NULL) {
+          (*node)[branch]=new Node();
+          is_new = true;
+        }
+        node = (*node)[branch];
+      }
+    }
+    assert(node);
+    if(is_new) {
+      node->gid=group_count;
+      gr2lits.resize(group_count+1);
+      gr2lits[group_count]=LitSet(current_lits);
+      gr2parent.resize(group_count+1);
+      gr2parent[group_count]=parent_group;
+      gr2qlev.resize(group_count+1);
+      gr2qlev[group_count]=ql;
+      grouped_levels[ql].push_back(group_count);
+      std::cerr<<"gr: "<<node->gid<<std::endl;
+      std::cerr<<"ls: "<<gr2lits[group_count]<<std::endl;
+      std::cerr<<"ql: "<<ql<<std::endl;
+      std::cerr<<"par: "<<parent_group<<std::endl;
+      std::cerr<<"-----"<<std::endl;
+      ++group_count;
+    }
+    parent_group=node->gid;
+  }
+}
+
+<<implementation>>=
+size_t Groups::parent(size_t gid) const{
+  assert(gid<group_count);
+  return gr2parent[gid];
+}
+
+<<implementation>>=
+const vector<size_t>& Groups::groups(size_t qlev) const {
+  assert(qlev<levs.lev_count());
+  return grouped_levels[qlev];
+}
+
+<<implementation>>=
+const LitSet& Groups::lits(size_t gid) const {
+  assert(gid<group_count);
+  return gr2lits[gid];
+}
+
+
+<<implementation>>=
+size_t Groups::qlev(size_t gid) const {
+  assert(gid<group_count);
+  return gr2qlev[gid];
+}
+
+<<h includes>>=
+#include "DataStructures.hh"
+#include "LevelInfo.hh"
+#include "LitBitSet.hh"
+#include <unordered_map>
+#include <utility>
+#include "MiniSatExt.hh"
+
+<<private members>>=
+void add_clause(size_t clause_index);

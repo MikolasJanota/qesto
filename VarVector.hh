@@ -9,7 +9,7 @@
 #include <vector>
 #include <iostream>
 #include <iterator>
-#include "minisat_auxiliary.hh" 
+#include "minisat_auxiliary.hh"
 using std::iterator;
 using std::ostream;
 using std::vector;
@@ -29,12 +29,12 @@ public:
     _hash_code = EMPTY_HASH;
   }
 
-  inline VarVector(const VarVector& ls) { 
+  inline VarVector(const VarVector& ls) {
     _hash_code=ls._hash_code; _size=ls._size; _variables=ls._variables;
     if (_variables!=NULL) ++(_variables[0]);
   }
 
-  VarVector& operator= ( const VarVector& ls ) { 
+  VarVector& operator=(const VarVector& ls) {
     decrease();
     _hash_code=ls._hash_code; _size=ls._size; _variables=ls._variables;
     if (_variables!=NULL) ++(_variables[0]);
@@ -100,9 +100,9 @@ inline int VarVector::decrease() {
 }
 
 
-inline size_t VarVector::hash_code() const { return _hash_code;}
-inline size_t VarVector::size() const          { return _size; }
-inline bool VarVector::empty() const          { return _size==0; }
+inline size_t VarVector::hash_code() const {return _hash_code;}
+inline size_t VarVector::size() const      {return _size;}
+inline bool VarVector::empty() const       {return _size==0;}
 inline const Var VarVector::operator [] (size_t index) const {
   assert(index < _size);
   return _variables[index+1]; }

@@ -1,0 +1,443 @@
+% File:  QestoGroups.nw
+% Author: mikolas
+% Created on: Tue, Dec 09, 2014 7:43:19 PM
+% Copyright (C) 2014, Mikolas Janota
+<<public members>>=
+QestoGroups(const Options& opt,
+            const LevelInfo& levs,
+            Groups& groups);
+bool solve();
+lbool solve(size_t confl_budget);
+
+<<QestoGroups.hh>>=
+#ifndef QESTOGROUPS_NW_29063
+#define QESTOGROUPS_NW_29063
+<<h includes>>
+class QestoGroups {
+ public: <<public members>>
+ private: <<private members>>
+ private: <<private methods>>
+};
+#endif
+
+<<QestoGroups.cc>>=
+<<c includes>>
+<<implementation>>
+
+<<implementation>>=
+QestoGroups::QestoGroups(const Options& opt,
+                         const LevelInfo& levs,
+                         Groups& groups)
+<<fields init>>
+{
+  assert(levs.lev_count());
+  assert(levs.level_type(levs.lev_count()-1)==EXISTENTIAL);
+  init();
+}
+
+<<private members>>=
+const Options& opt;
+const size_t verb;
+const LevelInfo& levs;
+size_t tot_bt_count;
+Groups& groups;
+<<fields init>>=
+: opt(opt)
+, verb(opt.get_verbose())
+, levs(levs)
+, tot_bt_count(0)
+, groups(groups)
+
+@ We introduce variables $s_k^G$ which indicate that the group $G$ is
+\emph{selected} at the quantification level $k$. If the variable is false, then we say that the
+clause is \emph{deselected}.
+<<private methods>>=
+Var s(size_t quant_level,size_t group_index);
+
+@ For each  quantification level, we create a SAT solver, which stores the abstraction
+for that level. To obtain a more uniform implementation, there is an \emph{additional
+  level} representing the universal player.
+<<private members>>=
+SATSPC::MiniSatExt* abstractions;
+<<fields init>>=
+, abstractions(new SATSPC::MiniSatExt[levs.lev_count()+1])
+
+
+@ Before solving the abstractions must be initialized with requirements on the $s$ variables.
+<<implementation>>=
+void QestoGroups::init(){
+  init_abstractions();
+  <<init svars>>
+  <<init game rules>>
+  if(opt.get_ex_inst()){
+    inst_e();
+  }
+  if(opt.get_resdep()) {
+    assert(0);
+    for(size_t ql=0;ql<levs.lev_count();++ql){
+      if(level_type(ql)==UNIVERSAL)
+        encode_resdep(ql); // encode resolution dependencies
+    }
+  }
+}
+
+@ The invariant for variables $s_k^G$ is that an abstraction at level $m$ can
+only refer to variables $s_k^G$ with $k\leq m$.  We  encode into the
+abstractions that $s_k^G$ is true iff $s_{k-1}^G$ is true and all the literals
+at level $k$ in the group $G$ are falsified.
+<<init svars>>=
+vector<Lit> saux;
+for(size_t qlev=0;qlev<levs.lev_count();++qlev){
+  vector<size_t> gs=groups.groups(qlev);
+  FOR_EACH(gi,gs) {
+    const size_t g=*gi;
+    saux.clear();
+    std::cerr<<g<<":"<<groups.lits(g)<<std::endl;
+    if(qlev) saux.push_back(mkLit(s(qlev-1,groups.parent(g))));
+    const auto& ls=groups.lits(g);
+    FOR_EACH(li,ls) saux.push_back(~(*li));
+    const auto sel_lit=mkLit(s(qlev,g));
+    if(opt.get_dir1_enc()) {
+      if(level_type(qlev)==EXISTENTIAL) {
+        encode_and_neg(abstractions[qlev],sel_lit,saux);
+      } else {
+        encode_and_neg(abstractions[qlev],sel_lit,saux);
+      }
+    } else {
+      encode_and(abstractions[qlev],sel_lit,saux);
+    }
+  }
+}
+
+@ At all universal levels, the universal player must select at least one group
+(otherwise it immediately loses). At all existential levels $k$, the existential player
+must \emph{deselect} all groups whose highest existential literal is at level$\leq k$.
+<<init game rules>>=
+vec<Lit> aux;
+for(size_t qlev=0;qlev<levs.lev_count();++qlev){
+  if(level_type(qlev)==EXISTENTIAL) continue;
+  vector<size_t> gs=groups.groups(qlev);
+  aux.clear();
+  FOR_EACH(gi,gs) aux.push(mkLit(s(qlev,*gi)));
+  abstractions[qlev].addClause_(aux);
+}
+{ const auto sz=levs.lev_count();
+  vector<size_t> gs=groups.groups(sz-1);
+  aux.clear();
+  FOR_EACH(gi,gs) aux.push(mkLit(s(sz-1,*gi)));
+  abstractions[sz].addClause_(aux);
+}
+
+FOR_EACH(gi,groups.groups(levs.lev_count()-1)) {
+  size_t ql=levs.lev_count()-1;
+  size_t meql=levs.lev_count()-1;
+  auto group=*gi;
+  auto egroup=*gi;
+  while(ql&&groups.lits(group).empty()) {
+    assert(groups.parent(group)!=group);
+    --ql;
+    group=groups.parent(group);
+    if(levs.level_type(ql)==EXISTENTIAL){
+      meql=ql;
+      egroup=group;
+    }
+  }
+  if(verb>3)std::cerr<<"mq: "<<meql<<std::endl;
+  abstractions[meql].addClause(~mkLit(s(meql,egroup)));
+}
+
+@ The solver assigns values to variables, starting from the outermost block of the
+prefix. For each block it uses the corresponding abstraction to obtain  the values.
+If an abstraction becomes unsatisfiable, the solver \emph{backtracks}. Note that at some
+point at least one abstraction must become unsatisfiable due to the dummy
+additional universal level at the end of the prefix. The backtracking is not
+necessarily by 1 quantification level since we analyze the source of
+unsatisfiablity (in principle similar to conflict analysis).
+<<implementation>>=
+lbool QestoGroups::solve(size_t confl_budget) {
+  size_t qlev=0;
+  vec<Lit> conflict_clause;
+  vec<Lit> trail;
+  while (!opt.get_luby_rest()||confl_budget--) {
+    assert(qlev<=levs.lev_count());
+    const bool sat=abstractions[qlev].solve(trail);
+    if(sat) {
+      if(verb>3)print_model(std::cerr<<"m: ",abstractions[qlev].model)<<std::endl;
+      assert(qlev<levs.lev_count());
+      FOR_EACH(gi,groups.groups(qlev))
+        trail.push(to_lit(abstractions[qlev].model,s(qlev,*gi)));
+      ++qlev;
+    } else {//attempt conflict resolution
+       ++tot_bt_count;
+       conflict_clause.clear();
+       size_t bt_qlev=-1;
+       const bool resolved=analyze(qlev,trail,/*out*/bt_qlev,/*out*/conflict_clause);
+       if(!resolved) {
+         //formula true iff universal lost
+         return level_type(qlev)==UNIVERSAL?l_True:l_False;
+       } else {
+         assert(qlev>bt_qlev);
+         do{
+           --qlev;
+           FOR_EACH(gi,groups.groups(qlev)) trail.pop();
+         } while (qlev>bt_qlev);
+         if(verb>3)std::cerr<<"cc: "<<conflict_clause<<std::endl;
+         abstractions[bt_qlev].addClause_(conflict_clause);
+       }
+    }
+  }
+  if(verb>1)std::cerr<<"restart "<<tot_bt_count<<std::endl;
+  return l_Undef;
+}
+
+<<implementation>>=
+bool QestoGroups::solve() {
+  int curr_restarts = 0;
+  lbool status=l_Undef;
+  const double restart_inc=1.5;
+  const int restart_first=100;
+  while(status==l_Undef){
+    const double rest_base = luby(restart_inc, curr_restarts);
+    status = solve(rest_base * restart_first);
+    curr_restarts++;
+  }
+  assert(status!=l_Undef);
+  return status==l_True;
+}
+
+@ During the  conflict analysis we will also need a mapping from $s^k_C$ variables
+to the information about them.
+<<private members>>=
+struct SInfo {
+  size_t qlev;
+  size_t group;
+};
+
+<<private methods>>=
+SInfo get_info(Var s) const;
+
+@ As the analysis is quite differmmment for the two players, we separat it into different procedures.
+<<implementation>>=
+bool QestoGroups::analyze(size_t qlev,const vec<Lit>& trail,
+                    size_t& bt_qlev,vec<Lit>& conflict_clause) {
+  QuantifierType loser=level_type(qlev);
+  if(verb>2)std::cerr<<"analyse loser:"<<loser<<"@"<<qlev<<std::endl;
+  return loser==EXISTENTIAL ? analyze_exists(qlev,trail,bt_qlev,conflict_clause)
+                            : analyze_univ(qlev,trail,bt_qlev,conflict_clause);
+}
+
+@ We start with a unsatisfiable core from the abstraction at the conflict
+level [[qlev]]. We need to make sure that at least one of the clauses that
+appear in the core are already deselected when we get to [[qlev]] next
+time.  At this point we're just backtracking by 2 levels.
+<<implementation>>=
+bool QestoGroups::analyze_exists(size_t qlev,const vec<Lit>& trail,
+                          size_t& bt_qlev,vec<Lit>& conflict_clause) {
+  assert(level_type(qlev)==EXISTENTIAL);
+  if(qlev<2) return false;
+  bt_qlev=qlev-2;
+  if(verb>2)std::cerr<<"bt_qlev:"<<bt_qlev<<std::endl;
+  const auto& abstraction_conflict=abstractions[qlev].conflict;
+  for(int i=0;i<abstraction_conflict.size();++i) {
+    const Lit l=abstraction_conflict[i];
+    const auto vi=get_info(var(l));
+    if(!sign(l)) continue;
+    conflict_clause.push(~mkLit(s(bt_qlev,find_parent(bt_qlev,vi.group))));
+  }
+  return true;
+}
+
+@ To analyze the conflict for the universal player, we need to look at the
+clauses that are deselected at the moment, and are causing the universal
+player to lose. If a clause is satisfied by the existential player, the
+universal player cannot do anything about it. So we define the backtracking
+level for the universal player as the maximum quantification level of literals
+that satisfy a clause with no true existential literals.
+Any clauses that are satisfied by an existential literal after the
+backtracking level can be removed from the conflict since the player can
+always replicate these moves.
+<<private members>>=
+vector<int> ex_maxlev;// maximum lev of satisfying ex lit
+<<implementation>>=
+bool QestoGroups::analyze_univ(size_t qlev,const vec<Lit>& trail,
+                    size_t& bt_qlev,vec<Lit>& conflict_clause) {
+  assert(level_type(qlev)==UNIVERSAL);
+  if(qlev<2) return false;
+  const auto& abstraction_conflict=abstractions[qlev].conflict;
+  if(verb>3)std::cerr<<"abstraction_conflict:"<<abstraction_conflict<<std::endl;
+  bt_qlev=qlev-2;
+  const auto sz=abstraction_conflict.size();
+  ex_maxlev.assign(sz,-1);
+  bool all_opponent=true;
+  for(int i=0;i<sz;++i) {//analyze each group in the core
+    const Lit conflict_lit=abstraction_conflict[i];
+    if(sign(conflict_lit)) continue;
+    <<update max levels>>
+  }
+  if(all_opponent) return false;
+  if(verb>2)std::cerr<<"bt_qlev:"<<bt_qlev<<std::endl;
+  for(int i=0;i<sz;++i) {
+    const Lit l=abstraction_conflict[i];
+    if(sign(l)) continue;
+    const auto vi=get_info(var(l));
+    if(ex_maxlev[i]<=(int)bt_qlev)
+      conflict_clause.push(mkLit(s(bt_qlev,find_parent(bt_qlev,vi.group))));
+  }
+  return true;
+}
+
+@ For the current clause we compute what the highest qualification level of
+a satisfied existential literal \emph{before} the conflict quantification level.
+We store this value into [[ex_maxlev[i]]] (it stays [[-1]] if no ex.\ lit satisfies the clause).
+Concurrently we compute the highest quantification level of a universal
+literal (and store it into [[uni_satlev]]).  If a clause is satisfied only by
+universal literals and lits after the conflict lev,
+the maximal quantification level of the satisifying universal is used to
+update the backtracking level (because only such clauses can be enforced by the
+universal player).
+<<update max levels>>=
+Lit sat_lit;
+const auto group=get_info(var(conflict_lit)).group;
+const bool issat=find_sat_lit(group,sat_lit);
+if(issat){
+  const auto sat_lit_t=levs.type(sat_lit);
+  const auto sat_lit_l=levs.qlev(sat_lit);
+  if(sat_lit_t==EXISTENTIAL){
+    if((int)sat_lit_l>ex_maxlev[i])
+      ex_maxlev[i]=sat_lit_l;
+  } else {
+    all_opponent=false;
+    if(sat_lit_l>bt_qlev) bt_qlev=sat_lit_l;
+  }
+}
+
+<<implementation>>=
+void QestoGroups::inst_e(){
+  assert (0);
+  vec<Lit> ls;
+  for(size_t ql=0;ql<levs.lev_count();++ql){
+    if(level_type(ql)!=EXISTENTIAL) continue;
+  }
+}
+
+<<private members>>=
+size_t rescount;
+<<fields init>>=
+,rescount(0)
+
+<<implementation>>=
+void QestoGroups::encode_resdep(size_t qlev){
+  assert (0);
+  assert(level_type(qlev)==UNIVERSAL);
+}
+
+<<implementation>>=
+size_t QestoGroups::find_parent(size_t qlev,size_t group) {
+   assert(groups.qlev(group)>=qlev);
+   while(1){
+     const auto gql=groups.qlev(group);
+     if(gql==qlev) return group;
+     group=groups.parent(group);
+   }
+}
+
+<<implementation>>=
+bool QestoGroups::find_sat_lit(size_t group,Lit& l){
+  while(1){
+    const auto ql=groups.qlev(group);
+    FOR_EACH(li,groups.lits(group)) {
+      l=*li;
+      if(eval(l,abstractions[ql].model)==l_True)
+        return true;
+    }
+    const auto parent=groups.parent(group);
+    if(group==parent) return false;
+    group=parent;
+  }
+  assert(0);
+  return false;
+}
+
+<<private members>>=
+vector<Var> svars;
+vector<SInfo> infos;
+
+<<implementation>>=
+void QestoGroups::init_abstractions() {
+  Var maxv=levs.maxv();
+  const auto level_count =levs.lev_count();
+  for(size_t qlev=0;qlev<level_count;++qlev){
+    if(opt.get_dir1_enc()) abstractions[qlev].phase_saving=0;
+    abstractions[qlev].new_variables(maxv);
+    const auto& gs=groups.groups(qlev);
+    FOR_EACH(gi,gs) {
+      const auto group = *gi;
+      const Var v=abstractions[qlev].newVar(level_type(qlev)==EXISTENTIAL);
+      maxv=v;
+      if (svars.size()<=group) svars.resize(group+1,-1);
+      svars[group]=v;
+      const size_t inx=v-levs.maxv()-1;
+      if (infos.size()<=inx) infos.resize(inx+1);
+      infos[inx].qlev=qlev;
+      infos[inx].group=group;
+    }
+  }
+  abstractions[level_count].new_variables(maxv);
+}
+
+<<implementation>>=
+Var QestoGroups::s(size_t qlev,size_t group){
+  assert(qlev<levs.lev_count());
+  assert(groups.qlev(group)==qlev);
+  assert(group<svars.size());
+  return svars[group];
+}
+
+<<implementation>>=
+QestoGroups::SInfo QestoGroups::get_info(Var s) const {
+  assert(s>levs.maxv());
+  const size_t inx=s-levs.maxv()-1;
+  assert(inx<infos.size());
+  return infos[inx];
+}
+
+<<private methods>>=
+inline QuantifierType level_type(size_t qlev) {
+  assert(qlev<=levs.lev_count());
+  return qlev<levs.lev_count() ? levs.level_type(qlev) : UNIVERSAL;
+}
+
+<<public members>>=
+inline size_t get_btcount() const { return tot_bt_count; }
+
+<<c includes>>=
+#include <unordered_set>
+#include "QestoGroups.hh"
+#include "ClausesInversion.hh"
+#include "LitBitSet.hh"
+using std::max;
+using std::min;
+using std::make_pair;
+using SATSPC::vec;
+using SATSPC::Lit;
+using SATSPC::lit_Undef;
+
+<<h includes>>=
+#include "Options.hh"
+#include "Groups.hh"
+#include "DataStructures.hh"
+#include "LevelInfo.hh"
+#include <unordered_map>
+#include <utility>
+#include "MiniSatExt.hh"
+
+<<private methods>>=
+void init();
+bool analyze(size_t qlev,const vec<Lit>& trail,size_t& bt_qlev,vec<Lit>& conflict_clause);
+bool analyze_univ(size_t qlev,const vec<Lit>& trail,size_t& bt_qlev,vec<Lit>& conflict_clause);
+bool analyze_exists(size_t qlev,const vec<Lit>& trail,size_t& bt_qlev,vec<Lit>& conflict_clause);
+size_t find_parent(size_t qlev,size_t group);
+bool find_sat_lit(size_t group,Lit& l);
+void init_abstractions();
+void inst_e();
+void encode_resdep(size_t qlev);

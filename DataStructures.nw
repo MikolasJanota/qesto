@@ -10,9 +10,9 @@
 #endif
 
 <<QTypes>>=
-enum    QuantifierType                        { UNIVERSAL=0, EXISTENTIAL=1 };
-typedef std::pair<QuantifierType,VarVector>           Quantification;
-typedef std::vector<Quantification>                Prefix;
+enum    QuantifierType                      {UNIVERSAL=0,EXISTENTIAL=1};
+typedef std::pair<QuantifierType,VarVector> Quantification;
+typedef std::vector<Quantification>         Prefix;
 struct QFla {
   Prefix                pref;
   vector<LitSet>        cnf;
@@ -110,4 +110,3 @@ inline VarVector append(const VarVector& a, const std::vector<Var>& b) {
 #include "VarSet.hh"
 #include "VarVector.hh"
 #include <vector>
-

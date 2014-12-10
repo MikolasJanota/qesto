@@ -117,6 +117,7 @@ def main():
   options.add_short_non_arg_option('ex_inst','-e','use existential instantiation')
   options.add_short_non_arg_option('luby_rest','-l','use luby restarts')
   options.add_short_non_arg_option('dir1_enc','-1','enc of var only in 1 dir')
+  options.add_short_non_arg_option('groups','-g','merge clauses into groups')
 ###
   generate(options, sys.stdout, sys.stderr)
 
