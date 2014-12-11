@@ -92,7 +92,6 @@ for(size_t qlev=0;qlev<levs.lev_count();++qlev){
   FOR_EACH(gi,gs) {
     const size_t g=*gi;
     saux.clear();
-    std::cerr<<g<<":"<<groups.lits(g)<<std::endl;
     if(qlev) saux.push_back(mkLit(s(qlev-1,groups.parent(g))));
     const auto& ls=groups.lits(g);
     FOR_EACH(li,ls) saux.push_back(~(*li));

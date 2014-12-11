@@ -57,6 +57,7 @@ int main(int argc, char** argv) {
     cerr << rex.what() << endl;
     exit(100);
   }
+  std::cout<<"c done reading: "<<read_cpu_time()<<std::endl;
   QFla qf;
   qf.pref=rq.get_prefix();
   qf.cnf=rq.get_clauses();
@@ -64,11 +65,11 @@ int main(int argc, char** argv) {
     qf.pref.push_back(make_pair(EXISTENTIAL,VarVector()));
   }
   bool r;
-  std::cerr<<": "<<qf<<std::endl;
   LevelInfo levs(qf.pref);
-  Groups grs(levs,qf);
+  Groups* grs=NULL;
   if(options.get_groups()) {
-    gps=new QestoGroups(options,levs,grs);
+    grs=new Groups(levs,qf);
+    gps=new QestoGroups(options,levs,*grs);
     r=gps->solve();
     std::cout<<"c bt_count: "<<gps->get_btcount()<<std::endl;
   } else {

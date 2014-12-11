@@ -45,11 +45,19 @@ public:
     }
     return r;
   }
+
 private:
   const Prefix pref;
   Var mxv;
   vector<std::pair<QuantifierType, size_t> > vis;
   LevelInfo(const LevelInfo& o) {assert(0);}
+};
+
+struct LevCmp {
+  const LevelInfo* li;
+  LevCmp(const LevelInfo* li):li(li){ }
+  inline bool operator () (const Lit x, const Lit& y) const 
+  { return li->qlev(x)<li->qlev(y); }
 };
 #endif
 
