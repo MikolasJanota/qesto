@@ -30,24 +30,26 @@ size_t qlev(size_t gid) const;
 <<Groups.cc>>=
 #include "Groups.hh"
 #include "mtl/Sort.h"
+using SATSPC::lit_Error;
 <<implementation>>
 
 <<private members>>=
 struct Node;
 
 <<private members>>=
-struct Edge { 
-  Edge():l(SATSPC::lit_Error),n(NULL) { }
-  Edge(Lit l, Node* n):l(l),n(n) { }
-  Lit l; Node* n; 
+struct Edge {
+  Edge():l(SATSPC::lit_Error),n(NULL),ql(-1) { }
+  Edge(Lit l, Node* n, size_t ql):l(l),n(n),ql(ql) { }
+  Lit l; Node* n;
+  size_t ql;
 };
 
 
 <<private members>>=
-struct Node { 
+struct Node {
   Node():is_end(false) {}
   bool is_end;
-  std::vector<Edge> es; 
+  std::vector<Edge> es;
 };
 
 <<private members>>=
@@ -74,22 +76,36 @@ bool Groups::add_clause(size_t clause_index) {
   LevCmp lc(&levs);
   SATSPC::sort(cls,lc);
   bool is_new=false;
-  for(int i=0;i<cls.size();++i) {
-    if(node->is_end)return false;
-    const Lit l=cls[i];
+  size_t curr_lev=0;
+  int i=0;
+  const auto clsz=cls.size();
+  while(curr_lev<levs.lev_count()){
+    //if(node->is_end){assert(!is_new);return false;}
+    Lit l=SATSPC::lit_Undef;
+    if((i>=clsz)||((curr_lev+1)<levs.qlev(cls[i]))) {
+      l=lit_Error;
+      ++curr_lev;
+      if(curr_lev==levs.lev_count())
+        break;
+    }else{
+      l=cls[i];
+      curr_lev=levs.qlev(l);
+      ++i;
+    }
     auto& es=node->es;
     const auto sz=es.size();
     size_t j=0;
     while(j<sz&&es[j].l!=l) ++j;
     if(j==sz) {
       is_new=true;
-      es.push_back(Edge(l,new Node()));
+      es.push_back(Edge(l,new Node(),curr_lev));
     }
     assert(es[j].l==l);
+    assert(es[j].ql==curr_lev);
     node=es[j].n;
   }
   node->is_end=true;
-  del_subtree(node);//remove subsumed
+  //del_subtree(node);//remove subsumed
   return is_new;
 }
 
@@ -105,41 +121,27 @@ void Groups::gen_groups(const Node& n,
                         size_t ql,
                         size_t parent_group,
                         vector<Lit>& accum){
+  assert(ql<levs.lev_count());
   bool new_group=n.es.empty();
   FOR_EACH(i,n.es) {
-    assert(levs.qlev(i->l)>=ql);
-    if(levs.qlev(i->l)!=ql){
+    assert(i->ql==(ql+1)||i->ql==ql);
+    if(i->ql!=ql){
       new_group=true;
       break;
     }
   }
   const auto gid=new_group ? add_group(LitSet(accum),ql,parent_group) : -1;
   FOR_EACH(i,n.es) {
-    if(levs.qlev(i->l)!=ql){
+    if(i->ql!=ql){
+      assert(i->ql==ql+1);
       assert(new_group);
-      auto _ql=ql;
-      auto _gid=gid;
-      auto nql=levs.qlev(i->l);
-      while((_ql+1)<nql) {
-        ++_ql;
-        _gid=add_group(LitSet(),_ql,_gid);
-      }
       vector<Lit> new_accum;
-      new_accum.push_back(i->l);
-      gen_groups(*(i->n), _ql+1,_gid,new_accum);
+      if(i->l!=lit_Error)new_accum.push_back(i->l);
+      gen_groups(*(i->n),ql+1,gid,new_accum);
     } else {
-      accum.push_back(i->l);
+      if(i->l!=lit_Error)accum.push_back(i->l);
       gen_groups(*(i->n),ql,parent_group,accum);
-      accum.pop_back();
-    }
-  }
-  if(n.es.empty()){
-    assert(new_group);
-    auto _ql=ql+1;
-    auto _gid=gid;
-    while(_ql<levs.lev_count()) {
-      _gid=add_group(LitSet(),_ql,_gid);
-      ++_ql;
+      if(i->l!=lit_Error)accum.pop_back();
     }
   }
 }
@@ -154,12 +156,12 @@ size_t Groups::add_group(LitSet ls, size_t ql, size_t parent_group){
   gr2parent[gid]=ql?parent_group:gid;
   gr2qlev[gid]=ql;
   grouped_levels[ql].push_back(gid);
-  //std::cerr<<"-----"<<std::endl;
-  //std::cerr<<"gr: "<<gid<<std::endl;
-  //std::cerr<<"ls: ["<<gr2lits[gid]<<"]\n";
-  //std::cerr<<"ql: "<<gr2qlev[gid]<<std::endl;
-  //std::cerr<<"par: "<<gr2parent[gid]<<std::endl;
-  //std::cerr<<"-----"<<std::endl;
+  std::cerr<<"-----"<<std::endl;
+  std::cerr<<"gr: "<<gid<<std::endl;
+  std::cerr<<"ls: ["<<gr2lits[gid]<<"]\n";
+  std::cerr<<"ql: "<<gr2qlev[gid]<<std::endl;
+  std::cerr<<"par: "<<gr2parent[gid]<<std::endl;
+  std::cerr<<"-----"<<std::endl;
   return gid;
 }
 
