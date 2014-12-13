@@ -79,8 +79,10 @@ bool Groups::add_clause(size_t clause_index) {
   size_t curr_lev=0;
   int i=0;
   const auto clsz=cls.size();
+  Node *last_real_node=NULL;
+  size_t last_real_lev=-1;
   while(curr_lev<levs.lev_count()){
-    //if(node->is_end){assert(!is_new);return false;}
+    if(node->is_end){assert(!is_new);return false;}
     Lit l=SATSPC::lit_Undef;
     if((i>=clsz)||((curr_lev+1)<levs.qlev(cls[i]))) {
       l=lit_Error;
@@ -92,6 +94,7 @@ bool Groups::add_clause(size_t clause_index) {
       curr_lev=levs.qlev(l);
       ++i;
     }
+    //std::cerr<<"l:"<<l<<std::endl;
     auto& es=node->es;
     const auto sz=es.size();
     size_t j=0;
@@ -103,9 +106,16 @@ bool Groups::add_clause(size_t clause_index) {
     assert(es[j].l==l);
     assert(es[j].ql==curr_lev);
     node=es[j].n;
+    if(l!=lit_Error){
+      last_real_node=node;
+      last_real_lev=curr_lev;
+    }
   }
-  node->is_end=true;
-  //del_subtree(node);//remove subsumed
+  if(last_real_node!=NULL) {
+    last_real_node->is_end=true;
+    //std::cerr<<"emp-"<<std::endl;
+    empty_subtree(last_real_node,last_real_lev);//remove subsumed
+  }
   return is_new;
 }
 
@@ -156,13 +166,34 @@ size_t Groups::add_group(LitSet ls, size_t ql, size_t parent_group){
   gr2parent[gid]=ql?parent_group:gid;
   gr2qlev[gid]=ql;
   grouped_levels[ql].push_back(gid);
-  std::cerr<<"-----"<<std::endl;
-  std::cerr<<"gr: "<<gid<<std::endl;
-  std::cerr<<"ls: ["<<gr2lits[gid]<<"]\n";
-  std::cerr<<"ql: "<<gr2qlev[gid]<<std::endl;
-  std::cerr<<"par: "<<gr2parent[gid]<<std::endl;
-  std::cerr<<"-----"<<std::endl;
+  //std::cerr<<"-----"<<std::endl;
+  //std::cerr<<"gr: "<<gid<<std::endl;
+  //std::cerr<<"ls: ["<<gr2lits[gid]<<"]\n";
+  //std::cerr<<"ql: "<<gr2qlev[gid]<<std::endl;
+  //std::cerr<<"par: "<<gr2parent[gid]<<std::endl;
+  //std::cerr<<"-----"<<std::endl;
   return gid;
+}
+
+<<implementation>>=
+void Groups::empty_subtree(Node* n,size_t ql) {
+  auto& es=n->es;
+  const auto ml=levs.lev_count()-1;
+  assert(es.size()||ql==ml);
+  if(ql==ml) {
+    del_subtree(n);
+    return;
+  }
+  //std::cerr<<"--emp-"<<std::endl;
+  for(size_t i=1;i<es.size();++i) {
+    del_subtree(es[i].n);
+    delete es[i].n;
+  }
+  while(es.size()>1) es.pop_back();
+  //std::cerr<<"erase:"<<es[0].l<<std::endl;
+  es[0].l=lit_Error;
+  es[0].ql=ql+1;
+  empty_subtree(es[0].n,ql+1);
 }
 
 <<implementation>>=
@@ -212,3 +243,4 @@ void del_subtree(Node* n);
 void gen_groups();
 void gen_groups(const Node& n, size_t ql, size_t parent_group, vector<Lit>& accum);
 size_t add_group(LitSet ls, size_t ql, size_t parent_group);
+void empty_subtree(Node* n,size_t ql);
