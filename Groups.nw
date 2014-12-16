@@ -175,12 +175,12 @@ size_t Groups::add_group(LitSet ls, size_t ql, size_t parent_group){
   gr2parent[gid]=ql?parent_group:gid;
   gr2qlev[gid]=ql;
   grouped_levels[ql].push_back(gid);
-  std::cerr<<"-----"<<std::endl;
-  std::cerr<<"gr: "<<gid<<std::endl;
-  std::cerr<<"ls: ["<<gr2lits[gid]<<"]\n";
-  std::cerr<<"ql: "<<gr2qlev[gid]<<std::endl;
-  std::cerr<<"par: "<<gr2parent[gid]<<std::endl;
-  std::cerr<<"-----"<<std::endl;
+//  std::cerr<<"-----"<<std::endl;
+//  std::cerr<<"gr: "<<gid<<std::endl;
+//  std::cerr<<"ls: ["<<gr2lits[gid]<<"]\n";
+//  std::cerr<<"ql: "<<gr2qlev[gid]<<std::endl;
+//  std::cerr<<"par: "<<gr2parent[gid]<<std::endl;
+//  std::cerr<<"-----"<<std::endl;
   return gid;
 }
 
