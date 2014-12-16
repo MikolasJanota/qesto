@@ -1,4 +1,4 @@
-p cnf
+p cnf 5 2
 e 1 2 0
 a 3 0
 e 4 5 0

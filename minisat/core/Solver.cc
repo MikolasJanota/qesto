@@ -131,14 +131,14 @@ Var Solver::newVar(bool sign, bool dvar)
 
 bool Solver::addClause_(vec<Lit>& ps)
 {
-//  fprintf(stderr,"addClause_");
-//  for(int i=0;i<ps.size();++i){
-//    fprintf(stderr," ");
-//    if(sign(ps[i])) fprintf(stderr,"-");
-//    fprintf(stderr,"%d",var(ps[i]));
-//  }
-//  fprintf(stderr," 0\n");
-//
+  fprintf(stderr,"addClause_");
+  for(int i=0;i<ps.size();++i){
+    fprintf(stderr," ");
+    if(sign(ps[i])) fprintf(stderr,"-");
+    fprintf(stderr,"%d",var(ps[i]));
+  }
+  fprintf(stderr," 0\n");
+
     assert(decisionLevel() == 0);
     if (!ok) return false;
 

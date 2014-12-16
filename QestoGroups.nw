@@ -313,55 +313,57 @@ if(issat){
 <<implementation>>=
 void QestoGroups::inst_e(){
   vector<const Groups::Node*> accum;
-  inst_e(groups.get_groups(),accum);
+  vector<Groups::Edge> eaccum;
+  inst_e(groups.get_groups(),accum,eaccum);
 }
 
 <<implementation>>=
 void QestoGroups::inst_e(const Groups::Node* n,
-                         vector<const Groups::Node*>& accum){
-  if(n->es.empty()) {
-    size_t i=accum.size();
+                         vector<const Groups::Node*>& accum,
+                         vector<Groups::Edge>& eaccum){
+  if(n->es.empty()&&groups.is_group(n->gid)) {
     vec<Lit> cl;
-    auto& gn=*(accum.back());
-    assert(groups.is_group(gn.gid));
-    bool first=true;
+    auto* gn=n;
+    size_t i=accum.size();
     while(i) {
       --i;
-      if(first)first=false;
-      else{
-        bool found=false;
-        Lit l=SATSPC::lit_Error;
-        size_t ql=-1;
-        FOR_EACH(j,accum[i]->es) {
-          if(j->n!=accum[i+1]) continue;
-          found=true;
-          l=j->l;
-        }
-        if(!found)assert(0);
-        if(level_type(ql)==EXISTENTIAL
-          && l!=lit_Undef)
-          cl.push(l);
-      }
+      const auto& e=(eaccum[i]);
       const auto& n=*(accum[i]);
-      if(accum.size()
-        && groups.is_group(n.gid)
-        && level_type(groups.qlev(n.gid))==EXISTENTIAL
-        ) {
-        const auto ql=groups.qlev(n.gid);
-        cl.push(~mkLit(s(ql,gn.gid)));
-        abstractions[ql].addClause(cl);
-        cl.pop();
+      if(i<eaccum.size()) {//TODO:needed?
+        if(level_type(e.ql)==EXISTENTIAL&&e.l!=lit_Undef) {
+          cl.push(e.l);
+        }
       }
-    }
-  } else {
-    FOR_EACH(i,n->es) {
-      const Lit l=i->l;
-      if(levs.type(l)==UNIVERSAL&&sign(l))
-        continue;
-      accum.push_back(n);
-      inst_e(i->n,accum);
+      if(cl.size()
+        && (!i||groups.is_group(n.gid))
+        && level_type(groups.qlev(gn->gid))==EXISTENTIAL
+        ) {
+        if(!i) {
+          assert(level_type(0)==EXISTENTIAL);
+          if(verb>5)std::cerr<<"e acl:"<<0<<std::endl;
+          abstractions[0].addClause(cl);
+        } else {
+          const auto ql=groups.qlev(n.gid);
+          cl.push(~mkLit(s(ql,n.gid)));
+          if(verb>5)std::cerr<<"e acl:"<<ql+1<<std::endl;
+          abstractions[ql+1].addClause(cl);
+          cl.pop();
+        }
+      }
+      if(groups.is_group(n.gid)) gn=accum[i];
     }
   }
+
+  accum.push_back(n);
+  FOR_EACH(i,n->es) {
+    const Lit l=i->l;
+    if(l!=lit_Undef&&levs.type(l)==UNIVERSAL&&sign(l))
+      continue;
+    eaccum.push_back(*i);
+    inst_e(i->n,accum,eaccum);
+    eaccum.pop_back();
+  }
+  accum.pop_back();
 }
 
 <<private members>>=
@@ -420,6 +422,7 @@ void QestoGroups::init_abstractions() {
       maxv=v;
       if (svars.size()<=group) svars.resize(group+1,-1);
       svars[group]=v;
+      std::cerr<<"m: "<<group<<":"<<v<<std::endl;
       const size_t inx=v-levs.maxv()-1;
       if (infos.size()<=inx) infos.resize(inx+1);
       infos[inx].qlev=qlev;
@@ -485,4 +488,6 @@ bool find_sat_lit(size_t group,Lit& l);
 void init_abstractions();
 void inst_e();
 void encode_resdep(size_t qlev);
-void inst_e(const Groups::Node* n,vector<const Groups::Node*>& accum);
+void inst_e(const Groups::Node* n,
+            vector<const Groups::Node*>& accum,
+            vector<Groups::Edge>& eaccum);
