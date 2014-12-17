@@ -26,7 +26,7 @@ size_t parent(size_t gid) const;
 const vector<size_t>& groups(size_t qlev) const;
 const LitSet& lits(size_t gid) const;
 size_t qlev(size_t gid) const;
-bool  is_group(size_t gid) const {return gid<group_count;}
+const vector<size_t>& get_children(size_t group);
 
 <<Groups.cc>>=
 #include "Groups.hh"
@@ -56,7 +56,10 @@ struct Node {
 };
 
 <<public members>>=
-const Node* get_groups() const {return &root;}
+inline const LevelInfo& get_levs() const {return levs;}
+inline const Node* get_groups() const {return &root;}
+inline bool is_group(const Node& n) const
+{return (n.gid)<group_count;}
 
 <<private members>>=
 const LevelInfo& levs;
@@ -212,6 +215,30 @@ void Groups::del_subtree(Node* n) {
   n->es.clear();
 }
 
+<<private members>>=
+bool children_computed;
+vector<vector<size_t> > children;
+<<init fields>>=
+, children_computed(false)
+
+<<implementation>>=
+const vector<size_t>& Groups::get_children(size_t group) {
+  assert(group<group_count);
+  if(!children_computed) gen_child_relation();
+  assert(children.size()==group_count);
+  return children[group];
+}
+
+<<implementation>>=
+void Groups::gen_child_relation(){
+  children_computed = true;
+  children.resize(group_count);
+  for(size_t group=0; group <group_count; ++group) {
+     const auto p=parent(group);
+     if(p!=group) children[p].push_back(group);
+  }
+}
+
 <<implementation>>=
 size_t Groups::parent(size_t gid) const{
   assert(gid<group_count);
@@ -251,3 +278,4 @@ void gen_groups();
 void gen_groups(Node& n, size_t ql, size_t parent_group, vector<Lit>& accum);
 size_t add_group(LitSet ls, size_t ql, size_t parent_group);
 void empty_subtree(Node* n,size_t ql);
+void gen_child_relation();

@@ -72,12 +72,8 @@ void QestoGroups::init(){
   if(opt.get_ex_inst()){
     inst_e();
   }
-  if(opt.get_resdep()) {
-    assert(0);
-    for(size_t ql=0;ql<levs.lev_count();++ql){
-      if(level_type(ql)==UNIVERSAL)
-        encode_resdep(ql); // encode resolution dependencies
-    }
+  if(opt.get_resdep()) {// encode resolution dependencies
+     encode_resdep();
   }
 }
 
@@ -321,7 +317,7 @@ void QestoGroups::inst_e(){
 void QestoGroups::inst_e(const Groups::Node* n,
                          vector<const Groups::Node*>& accum,
                          vector<Groups::Edge>& eaccum){
-  if(n->es.empty()&&groups.is_group(n->gid)) {
+  if(n->es.empty()&&groups.is_group(*n)) {
     vec<Lit> cl;
     auto* gn=n;
     size_t i=accum.size();
@@ -335,7 +331,7 @@ void QestoGroups::inst_e(const Groups::Node* n,
         }
       }
       if(cl.size()
-        && (!i||groups.is_group(n.gid))
+        && (!i||groups.is_group(n))
         && level_type(groups.qlev(gn->gid))==EXISTENTIAL
         ) {
         if(!i) {
@@ -350,7 +346,7 @@ void QestoGroups::inst_e(const Groups::Node* n,
           cl.pop();
         }
       }
-      if(groups.is_group(n.gid)) gn=accum[i];
+      if(groups.is_group(n)) gn=accum[i];
     }
   }
 
@@ -371,10 +367,130 @@ size_t rescount;
 <<fields init>>=
 ,rescount(0)
 
+@ For each universal group we encode that if the group is selected,
+another group from the same level must be selected so that
+at least one clause in that group is resolvable. And by resolvable we mean
+that there exists another clause with a complementary literal.
 <<implementation>>=
-void QestoGroups::encode_resdep(size_t qlev){
-  assert (0);
-  assert(level_type(qlev)==UNIVERSAL);
+void QestoGroups::encode_resdep(){
+  const GroupInversion gin(groups);
+  const auto& gs=groups.groups(0);
+  vector<Lit> branch_stack(levs.lev_count()+1);
+  LitBitSet current_literals;
+  FOR_EACH (group_index, gs) {
+    encode_resdep(gin,branch_stack,current_literals,*group_index);
+  }
+}
+
+@ Recurse until the end of clause and generate conditions for its resolvibility.
+<<implementation>>=
+void QestoGroups::encode_resdep(
+  const GroupInversion& gin,
+  vector<Lit>& branch_stack,
+  LitBitSet& current_literals,
+  size_t group) {
+  const auto& literals = groups.lits(group);
+  const auto qlev = groups.qlev(group);
+  FOR_EACH(li,literals) current_literals.add(*li);
+  if(group_type(group)==EXISTENTIAL) {
+    <<resdep existential group>>
+  } else {
+    <<resdep universal group>>
+  }
+}
+
+@  For each literal, compute the set of groups,
+at the same quantification level is literal, that enable the literal to be
+resolved. For each  universal quantification level [[ul]]
+upstream of the current group, generate the condition that if of this branch
+is selected then also one of these groups have to be selected--- but here he
+we need to adjust this group to the right quantification level by computing
+the parent at [[ul]].
+<<resdep existential group>>=
+vector<size_t> resolvables;
+for(size_t pivot_index=0; pivot_index<literals.size(); ++pivot_index){
+  const auto& pivot=literals[pivot_index];
+  resolvables.clear();
+  compute_resolvables(gin,
+                      current_literals,
+                      qlev,pivot,
+                      resolvables);
+  vec<Lit> aux;
+  for(size_t ul=0;ul<qlev;++ul){
+    if(level_type(ul)!=UNIVERSAL) continue;
+    aux.clear();
+    aux.push(~(branch_stack[ul]));
+    FOR_EACH(ri,resolvables) {
+      const auto p=find_parent(ul,*ri);
+      assert(p!=*ri);
+      aux.push(mkLit(s(ul,p)));
+    }
+    if(verb>5)std::cerr<<"brc@"<<ul<<":"<<aux<<std::endl;
+    abstractions[ul].addClause_(aux);
+  }
+}
+FOR_EACH(cgi,groups.get_children(group)){
+  encode_resdep(gin,branch_stack,current_literals,*cgi);
+}
+
+@ For each child and upstream level generating new branching variable.
+given the parent benching condition, require that at least on one of the
+current ones we branch.
+<<resdep universal group>>=
+vector<vec<Lit> > branching(qlev);
+const auto& children=groups.get_children(group);
+for(size_t ul=0;ul<qlev;++ul){
+  if(level_type(ul)!=UNIVERSAL) continue;
+  branching[ul].push(~branch_stack[ul]);
+}
+for(size_t child_index=0;child_index<children.size();++child_index){
+  for(size_t ul=0;ul<qlev;++ul){
+    if(level_type(ul)!=UNIVERSAL) continue;
+    const auto br=mkLit(abstractions[ul].newVar());
+    branching[ul].push(br);
+    branch_stack[ul]=br;
+  }
+  encode_resdep(gin,branch_stack,current_literals,children[child_index]);
+}
+for(size_t ul=0;ul<qlev;++ul){
+  if(level_type(ul)==UNIVERSAL)
+    abstractions[ul].addClause_(branching[ul]);
+}
+
+<<implementation>>=
+void QestoGroups::compute_resolvables(const GroupInversion& gin,
+                                      const LitBitSet& current_literals,
+                                      size_t qlev,
+                                      Lit pivot,
+                                      /*out*/vector<size_t>& resolvables){
+  const auto& gs=gin[~pivot];
+  FOR_EACH (other_index,gs) {
+    const auto &other_group =*other_index;
+    bool pivot_found=false;
+    size_t distance=0;
+    const auto& other_lits=groups.lits(other_group);
+    FOR_EACH(oli,other_lits) {
+      const Lit other_literal=*oli;
+      if(other_literal==~pivot) {
+        pivot_found=true;
+        continue;
+      }
+      if(current_literals.get(~other_literal)) ++distance;
+      if(distance>1) break;
+    }
+    if((distance<=1)&&!pivot_found)assert(0);
+    if(distance!=1)continue;
+    //verify  distance for upstream literals
+    size_t other_ancestor = other_group;
+    while(1) {
+      const auto oa=groups.parent(other_ancestor);
+      if (other_ancestor==oa) break;
+      other_ancestor=oa;
+      distance+=calc_distance(current_literals,groups.lits(other_ancestor));
+      if(distance>1) break;
+    }
+    if(distance==1) resolvables.push_back(other_group);
+  }
 }
 
 <<implementation>>=
@@ -449,6 +565,11 @@ QestoGroups::SInfo QestoGroups::get_info(Var s) const {
 }
 
 <<private methods>>=
+inline QuantifierType group_type(size_t gid) {
+  return level_type(groups.qlev(gid));
+}
+
+<<private methods>>=
 inline QuantifierType level_type(size_t qlev) {
   assert(qlev<=levs.lev_count());
   return qlev<levs.lev_count() ? levs.level_type(qlev) : UNIVERSAL;
@@ -456,6 +577,18 @@ inline QuantifierType level_type(size_t qlev) {
 
 <<public members>>=
 inline size_t get_btcount() const { return tot_bt_count; }
+
+<<implementation>>=
+size_t QestoGroups::calc_distance(const LitBitSet& current_literals,
+                const LitSet& other_literals) {
+  size_t return_value = 0;
+  FOR_EACH (other_literal_index, other_literals) {
+    const auto other_literal =*other_literal_index;
+    if (current_literals.get(~other_literal)) ++return_value;
+    if (return_value>1) break;
+  }
+  return return_value;
+}
 
 <<c includes>>=
 #include <unordered_set>
@@ -474,6 +607,7 @@ using SATSPC::lit_Undef;
 #include "Groups.hh"
 #include "DataStructures.hh"
 #include "LevelInfo.hh"
+#include "GroupInversion.hh"
 #include <unordered_map>
 #include <utility>
 #include "MiniSatExt.hh"
@@ -484,10 +618,21 @@ bool analyze(size_t qlev,const vec<Lit>& trail,size_t& bt_qlev,vec<Lit>& conflic
 bool analyze_univ(size_t qlev,const vec<Lit>& trail,size_t& bt_qlev,vec<Lit>& conflict_clause);
 bool analyze_exists(size_t qlev,const vec<Lit>& trail,size_t& bt_qlev,vec<Lit>& conflict_clause);
 size_t find_parent(size_t qlev,size_t group);
-bool find_sat_lit(size_t group,Lit& l);
-void init_abstractions();
+bool find_sat_lit(size_t group,Lit& l); void init_abstractions();
 void inst_e();
-void encode_resdep(size_t qlev);
+void encode_resdep();
 void inst_e(const Groups::Node* n,
             vector<const Groups::Node*>& accum,
             vector<Groups::Edge>& eaccum);
+static size_t calc_distance(const LitBitSet& current_literals,
+                       const LitSet& other_literals);
+void compute_resolvables(const GroupInversion& gin,
+                            const LitBitSet& current_literals,
+                                      size_t qlev,
+                                      Lit pivot,
+                                      /*out*/vector<size_t>& resolvables);
+void encode_resdep(
+  const GroupInversion& gin,
+  vector<Lit>& branch_stack,
+  LitBitSet& current_literals,
+  size_t group);

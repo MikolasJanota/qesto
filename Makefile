@@ -3,7 +3,8 @@ GENF=./generated/Options.cc ./generated/Options.hh\
      ./generated/LevelInfo.hh ./generated/LevelInfo.cc\
      ./generated/Groups.hh ./generated/Groups.cc\
      ./generated/Qesto.hh ./generated/Qesto.cc\
-     ./generated/QestoGroups.hh ./generated/QestoGroups.cc
+     ./generated/QestoGroups.hh ./generated/QestoGroups.cc\
+     ./generated/GroupInversion.hh ./generated/GroupInversion.cc
 CSRCS    = $(wildcard *.cc) $(wildcard ./generated/*.cc)
 NSRCS    = $(wildcard *.nw)
 YACC     = $(wildcard *.y)
