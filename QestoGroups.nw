@@ -538,7 +538,7 @@ void QestoGroups::init_abstractions() {
       maxv=v;
       if (svars.size()<=group) svars.resize(group+1,-1);
       svars[group]=v;
-      std::cerr<<"m: "<<group<<":"<<v<<std::endl;
+      if(verb>5)std::cerr<<"m: "<<group<<":"<<v<<std::endl;
       const size_t inx=v-levs.maxv()-1;
       if (infos.size()<=inx) infos.resize(inx+1);
       infos[inx].qlev=qlev;
