@@ -49,7 +49,7 @@ struct Edge {
 
 <<public members>>=
 struct Node {
-  Node():is_end(false),gid(-1) {}
+  Node():is_end(false),gid(-1) { }
   bool is_end;
   size_t gid;
   std::vector<Edge> es;
@@ -178,12 +178,12 @@ size_t Groups::add_group(LitSet ls, size_t ql, size_t parent_group){
   gr2parent[gid]=ql?parent_group:gid;
   gr2qlev[gid]=ql;
   grouped_levels[ql].push_back(gid);
-//  std::cerr<<"-----"<<std::endl;
-//  std::cerr<<"gr: "<<gid<<std::endl;
-//  std::cerr<<"ls: ["<<gr2lits[gid]<<"]\n";
-//  std::cerr<<"ql: "<<gr2qlev[gid]<<std::endl;
-//  std::cerr<<"par: "<<gr2parent[gid]<<std::endl;
-//  std::cerr<<"-----"<<std::endl;
+  std::cerr<<"-----"<<std::endl;
+  std::cerr<<"gr: "<<gid<<std::endl;
+  std::cerr<<"ls: ["<<gr2lits[gid]<<"]\n";
+  std::cerr<<"ql: "<<gr2qlev[gid]<<std::endl;
+  std::cerr<<"par: "<<gr2parent[gid]<<std::endl;
+  std::cerr<<"-----"<<std::endl;
   return gid;
 }
 
@@ -218,7 +218,7 @@ void Groups::del_subtree(Node* n) {
 <<private members>>=
 bool children_computed;
 vector<vector<size_t> > children;
-<<init fields>>=
+<<fields init>>=
 , children_computed(false)
 
 <<implementation>>=
@@ -231,11 +231,14 @@ const vector<size_t>& Groups::get_children(size_t group) {
 
 <<implementation>>=
 void Groups::gen_child_relation(){
-  children_computed = true;
+  assert(!children_computed);
+  children_computed=true;
   children.resize(group_count);
-  for(size_t group=0; group <group_count; ++group) {
+  for(size_t group=0; group<group_count; ++group) {
      const auto p=parent(group);
-     if(p!=group) children[p].push_back(group);
+     if(p==group) continue;
+     std::cerr<<p<<"<-"<<group<<std::endl;
+     children[p].push_back(group);
   }
 }
 

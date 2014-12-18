@@ -96,7 +96,7 @@ for(size_t qlev=0;qlev<levs.lev_count();++qlev){
       if(level_type(qlev)==EXISTENTIAL) {
         encode_and_neg(abstractions[qlev],sel_lit,saux);
       } else {
-        encode_and_neg(abstractions[qlev],sel_lit,saux);
+        encode_and_pos(abstractions[qlev],sel_lit,saux);
       }
     } else {
       encode_and(abstractions[qlev],sel_lit,saux);
@@ -157,10 +157,12 @@ lbool QestoGroups::solve(size_t confl_budget) {
     assert(qlev<=levs.lev_count());
     const bool sat=abstractions[qlev].solve(trail);
     if(sat) {
-      if(verb>3)print_model(std::cerr<<"m: ",abstractions[qlev].model)<<std::endl;
+      if(verb>5)print_model(std::cerr<<"m: ",abstractions[qlev].model)<<std::endl;
       assert(qlev<levs.lev_count());
-      FOR_EACH(gi,groups.groups(qlev))
+      FOR_EACH(gi,groups.groups(qlev)) {
         trail.push(to_lit(abstractions[qlev].model,s(qlev,*gi)));
+        if(verb>5)std::cerr<<"d:"<<to_lit(abstractions[qlev].model,s(qlev,*gi))<<std::endl;
+      }
       ++qlev;
     } else {//attempt conflict resolution
        ++tot_bt_count;
@@ -244,11 +246,11 @@ bool QestoGroups::analyze_exists(size_t qlev,const vec<Lit>& trail,
 
 @ To analyze the conflict for the universal player, we need to look at the
 clauses that are deselected at the moment, and are causing the universal
-player to lose. If a clause is satisfied by the existential player, the
+player to lose. If a group is satisfied by the existential player, the
 universal player cannot do anything about it. So we define the backtracking
 level for the universal player as the maximum quantification level of literals
-that satisfy a clause with no true existential literals.
-Any clauses that are satisfied by an existential literal after the
+that satisfy a group with no true existential literals.
+Any groups that are satisfied by an existential literal after the
 backtracking level can be removed from the conflict since the player can
 always replicate these moves.
 <<private members>>=
@@ -304,6 +306,8 @@ if(issat){
     all_opponent=false;
     if(sat_lit_l>bt_qlev) bt_qlev=sat_lit_l;
   }
+} else {
+  all_opponent=false;
 }
 
 <<implementation>>=
@@ -373,12 +377,15 @@ at least one clause in that group is resolvable. And by resolvable we mean
 that there exists another clause with a complementary literal.
 <<implementation>>=
 void QestoGroups::encode_resdep(){
+  for(size_t ul=0;ul<levs.lev_count();++ul){
+    abstractions[ul].new_variables((1+ul)*100);
+  }
   const GroupInversion gin(groups);
   const auto& gs=groups.groups(0);
-  vector<Lit> branch_stack(levs.lev_count()+1);
+  vector<Lit> branch_cond;
   LitBitSet current_literals;
   FOR_EACH (group_index, gs) {
-    encode_resdep(gin,branch_stack,current_literals,*group_index);
+    encode_resdep(gin,branch_cond,current_literals,*group_index);
   }
 }
 
@@ -386,16 +393,21 @@ void QestoGroups::encode_resdep(){
 <<implementation>>=
 void QestoGroups::encode_resdep(
   const GroupInversion& gin,
-  vector<Lit>& branch_stack,
+  const vector<Lit>& branch_cond,
   LitBitSet& current_literals,
   size_t group) {
+  if(verb>5)std::cerr<<"encode_resdep:"<<group<<std::endl;
   const auto& literals = groups.lits(group);
   const auto qlev = groups.qlev(group);
   FOR_EACH(li,literals) current_literals.add(*li);
   if(group_type(group)==EXISTENTIAL) {
     <<resdep existential group>>
-  } else {
-    <<resdep universal group>>
+  } //else {
+  <<resdep universal group>>
+  //}
+  FOR_EACH(li,literals) {
+    const bool rml=current_literals.remove(*li);
+    if(!rml)assert(0);
   }
 }
 
@@ -418,43 +430,52 @@ for(size_t pivot_index=0; pivot_index<literals.size(); ++pivot_index){
   vec<Lit> aux;
   for(size_t ul=0;ul<qlev;++ul){
     if(level_type(ul)!=UNIVERSAL) continue;
+    assert(branch_cond.size()>ul);
     aux.clear();
-    aux.push(~(branch_stack[ul]));
+    aux.push(~(branch_cond[ul]));
     FOR_EACH(ri,resolvables) {
       const auto p=find_parent(ul,*ri);
       assert(p!=*ri);
       aux.push(mkLit(s(ul,p)));
     }
-    if(verb>5)std::cerr<<"brc@"<<ul<<":"<<aux<<std::endl;
+    if(verb>5)std::cerr<<"ebrc@"<<ul<<":"<<aux<<std::endl;
     abstractions[ul].addClause_(aux);
   }
 }
-FOR_EACH(cgi,groups.get_children(group)){
-  encode_resdep(gin,branch_stack,current_literals,*cgi);
-}
+//FOR_EACH(cgi,groups.get_children(group)){
+//  encode_resdep(gin,branch_cond,current_literals,*cgi);
+//}
 
 @ For each child and upstream level generating new branching variable.
 given the parent benching condition, require that at least on one of the
 current ones we branch.
 <<resdep universal group>>=
-vector<vec<Lit> > branching(qlev);
 const auto& children=groups.get_children(group);
-for(size_t ul=0;ul<qlev;++ul){
-  if(level_type(ul)!=UNIVERSAL) continue;
-  branching[ul].push(~branch_stack[ul]);
-}
-for(size_t child_index=0;child_index<children.size();++child_index){
-  for(size_t ul=0;ul<qlev;++ul){
+if(children.size()){
+  vector<vec<Lit> > branching(qlev+1);
+  std::cerr<<"brcond:"<<branch_cond<<std::endl;
+  for(size_t ul=0;ul<=qlev;++ul){
     if(level_type(ul)!=UNIVERSAL) continue;
-    const auto br=mkLit(abstractions[ul].newVar());
-    branching[ul].push(br);
-    branch_stack[ul]=br;
+    assert(branch_cond.size()>=ul);
+    if(ul==qlev) branching[qlev].push(~mkLit(s(qlev,group)));
+    else branching[ul].push(~branch_cond[ul]);
   }
-  encode_resdep(gin,branch_stack,current_literals,children[child_index]);
-}
-for(size_t ul=0;ul<qlev;++ul){
-  if(level_type(ul)==UNIVERSAL)
+  vector<Lit> branch_cond_new(qlev+1);
+  for(size_t child_index=0;child_index<children.size();++child_index){
+    for(size_t ul=0;ul<=qlev;++ul){
+      if(level_type(ul)!=UNIVERSAL) continue;
+      const auto br=mkLit(abstractions[ul].newVar());
+      if(verb>5)std::cerr<<"brlit@"<<ul<<":"<<br<<std::endl;
+      branching[ul].push(br);
+      branch_cond_new[ul]=br;
+    }
+    encode_resdep(gin,branch_cond_new,current_literals,children[child_index]);
+  }
+  for(size_t ul=0;ul<=qlev;++ul){
+    if(level_type(ul)!=UNIVERSAL) continue;;
+    if(verb>5)std::cerr<<"abrc@"<<ul<<":"<<branching[ul]<<std::endl;
     abstractions[ul].addClause_(branching[ul]);
+  }
 }
 
 <<implementation>>=
@@ -463,18 +484,17 @@ void QestoGroups::compute_resolvables(const GroupInversion& gin,
                                       size_t qlev,
                                       Lit pivot,
                                       /*out*/vector<size_t>& resolvables){
+  if(verb>5)std::cerr<<"compute_resolvables: "<<pivot<<std::endl;
   const auto& gs=gin[~pivot];
   FOR_EACH (other_index,gs) {
     const auto &other_group =*other_index;
     bool pivot_found=false;
     size_t distance=0;
     const auto& other_lits=groups.lits(other_group);
+    if(verb>5)std::cerr<<"testing: "<<other_group<<":["<<other_lits<<"]"<<std::endl;
     FOR_EACH(oli,other_lits) {
       const Lit other_literal=*oli;
-      if(other_literal==~pivot) {
-        pivot_found=true;
-        continue;
-      }
+      if(other_literal==~pivot) pivot_found=true;
       if(current_literals.get(~other_literal)) ++distance;
       if(distance>1) break;
     }
@@ -487,9 +507,12 @@ void QestoGroups::compute_resolvables(const GroupInversion& gin,
       if (other_ancestor==oa) break;
       other_ancestor=oa;
       distance+=calc_distance(current_literals,groups.lits(other_ancestor));
+      if(verb>6)std::cerr<<"dist: "<<other_ancestor<<':'<<distance<<std::endl;
       if(distance>1) break;
     }
-    if(distance==1) resolvables.push_back(other_group);
+    if(distance!=1) continue;
+    if(verb>5)std::cerr<<"resolvable: "<<pivot<<'&'<<other_group<<std::endl;
+    resolvables.push_back(other_group);
   }
 }
 
@@ -633,6 +656,6 @@ void compute_resolvables(const GroupInversion& gin,
                                       /*out*/vector<size_t>& resolvables);
 void encode_resdep(
   const GroupInversion& gin,
-  vector<Lit>& branch_stack,
+  const vector<Lit>& branch_cond,
   LitBitSet& current_literals,
   size_t group);
