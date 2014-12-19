@@ -18,6 +18,7 @@ class QestoGroups {
  private: <<private members>>
  private: <<private methods>>
 };
+<<inline implementation>>
 #endif
 
 <<QestoGroups.cc>>=
@@ -58,7 +59,7 @@ Groups& groups;
 \emph{selected} at the quantification level $k$. If the variable is false, then we say that the
 clause is \emph{deselected}.
 <<private methods>>=
-Var s(size_t quant_level,size_t group_index);
+inline Var s(size_t quant_level,size_t group_index) const;
 
 @ For each  quantification level, we create a SAT solver, which stores the abstraction
 for that level. To obtain a more uniform implementation, there is an \emph{additional
@@ -162,6 +163,7 @@ lbool QestoGroups::solve(size_t confl_budget) {
   size_t qlev=0;
   vec<Lit> conflict_clause;
   vec<Lit> trail;
+  vector<bool> svals(opt.get_smax() ? (groups.get_group_count()+1) : 0);
   while (!opt.get_luby_rest()||confl_budget--) {
     assert(qlev<=levs.lev_count());
     const bool sat=abstractions[qlev].solve(trail);
@@ -169,8 +171,10 @@ lbool QestoGroups::solve(size_t confl_budget) {
       if(verb>5)print_model(std::cerr<<"m: ",abstractions[qlev].model)<<std::endl;
       assert(qlev<levs.lev_count());
       FOR_EACH(gi,groups.groups(qlev)) {
-        trail.push(to_lit(abstractions[qlev].model,s(qlev,*gi)));
-        if(verb>5)std::cerr<<"d:"<<to_lit(abstractions[qlev].model,s(qlev,*gi))<<std::endl;
+        const Lit dec_lit=opt.get_smax() ? smax(qlev,*gi,svals) 
+                                         : to_lit(abstractions[qlev].model,s(qlev,*gi));
+        trail.push(dec_lit);
+        if(verb>5)std::cerr<<"d:"<<dec_lit<<std::endl;
       }
       ++qlev;
     } else {//attempt conflict resolution
@@ -220,7 +224,7 @@ struct SInfo {
 };
 
 <<private methods>>=
-SInfo get_info(Var s) const;
+inline SInfo get_info(Var s) const;
 
 @ As the analysis is quite differmmment for the two players, we separat it into different procedures.
 <<implementation>>=
@@ -577,15 +581,33 @@ void QestoGroups::init_abstractions() {
 }
 
 <<implementation>>=
-Var QestoGroups::s(size_t qlev,size_t group){
+Lit QestoGroups::smax(size_t qlev,size_t group,
+                      vector<bool>& svals) {
+  const Lit sel_l=mkLit(s(qlev,group));
+  const auto& model=abstractions[qlev].model;
+  bool rv=eval(sel_l,model)==l_True;
+  if(rv==(level_type(qlev)==EXISTENTIAL)) {
+    rv=!qlev||svals[groups.parent(group)];//parent val
+    const auto& ls=groups.lits(group);
+    FOR_EACH(li,ls) {
+      if(!rv) break;
+      if(eval(*li,model)==l_True) rv=false;
+    }
+  }
+  svals[group]=rv;
+  return rv ? sel_l : ~sel_l;
+}
+
+<<inline implementation>>=
+inline Var QestoGroups::s(size_t qlev,size_t group) const{
   assert(qlev<levs.lev_count());
   assert(groups.qlev(group)==qlev);
   assert(group<svars.size());
   return svars[group];
 }
 
-<<implementation>>=
-QestoGroups::SInfo QestoGroups::get_info(Var s) const {
+<<inline implementation>>=
+inline QestoGroups::SInfo QestoGroups::get_info(Var s) const {
   assert(s>levs.maxv());
   const size_t inx=s-levs.maxv()-1;
   assert(inx<infos.size());
@@ -664,3 +686,4 @@ void encode_resdep(
   const vector<Lit>& branch_cond,
   LitBitSet& current_literals,
   size_t group);
+Lit smax(size_t qlev,size_t group,vector<bool>& svals);

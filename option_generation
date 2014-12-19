@@ -118,6 +118,7 @@ def main():
   options.add_short_non_arg_option('luby_rest','-l','use luby restarts')
   options.add_short_non_arg_option('dir1_enc','-1','enc of var only in 1 dir')
   options.add_short_non_arg_option('groups','-g','merge clauses into groups')
+  options.add_short_non_arg_option('smax','-m','in -1 mode, try rectify the setting of selection variables')
 ###
   generate(options, sys.stdout, sys.stderr)
 

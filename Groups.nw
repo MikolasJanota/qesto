@@ -58,6 +58,7 @@ struct Node {
 <<public members>>=
 inline const LevelInfo& get_levs() const {return levs;}
 inline const Node* get_groups() const {return &root;}
+inline size_t get_group_count() const {return group_count;}
 inline bool is_group(const Node& n) const
 {return (n.gid)<group_count;}
 
