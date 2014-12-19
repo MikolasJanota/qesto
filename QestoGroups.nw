@@ -33,6 +33,12 @@ QestoGroups::QestoGroups(const Options& opt,
   assert(levs.lev_count());
   assert(levs.level_type(levs.lev_count()-1)==EXISTENTIAL);
   init();
+  for(size_t ul=0;ul<levs.lev_count();++ul){
+    const auto& gs=groups.groups(ul);
+    size_t c=0;
+    FOR_EACH(gi,gs) if(groups.lits(*gi).empty())++c;
+    std::cerr<<"gs@l"<<ul<<":"<<gs.size()<<" e:"<<c<<std::endl;
+  }
 }
 
 <<private members>>=
@@ -73,7 +79,9 @@ void QestoGroups::init(){
     inst_e();
   }
   if(opt.get_resdep()) {// encode resolution dependencies
+     std::cerr<<"c resdep init start:"<<read_cpu_time()<<std::endl;
      encode_resdep();
+     std::cerr<<"c resdep init end:"<<read_cpu_time()<<std::endl;
   }
 }
 
@@ -94,6 +102,7 @@ for(size_t qlev=0;qlev<levs.lev_count();++qlev){
     const auto sel_lit=mkLit(s(qlev,g));
     if(opt.get_dir1_enc()) {
       if(level_type(qlev)==EXISTENTIAL) {
+        //encode_and(abstractions[qlev],sel_lit,saux);
         encode_and_neg(abstractions[qlev],sel_lit,saux);
       } else {
         encode_and_pos(abstractions[qlev],sel_lit,saux);
@@ -377,9 +386,6 @@ at least one clause in that group is resolvable. And by resolvable we mean
 that there exists another clause with a complementary literal.
 <<implementation>>=
 void QestoGroups::encode_resdep(){
-  for(size_t ul=0;ul<levs.lev_count();++ul){
-    abstractions[ul].new_variables((1+ul)*100);
-  }
   const GroupInversion gin(groups);
   const auto& gs=groups.groups(0);
   vector<Lit> branch_cond;
@@ -442,9 +448,6 @@ for(size_t pivot_index=0; pivot_index<literals.size(); ++pivot_index){
     abstractions[ul].addClause_(aux);
   }
 }
-//FOR_EACH(cgi,groups.get_children(group)){
-//  encode_resdep(gin,branch_cond,current_literals,*cgi);
-//}
 
 @ For each child and upstream level generating new branching variable.
 given the parent benching condition, require that at least on one of the
@@ -452,13 +455,14 @@ current ones we branch.
 <<resdep universal group>>=
 const auto& children=groups.get_children(group);
 if(children.size()){
-  vector<vec<Lit> > branching(qlev+1);
-  std::cerr<<"brcond:"<<branch_cond<<std::endl;
+  vector<vec<Lit>* > branching(qlev+1);
+  for(size_t i=0;i<branching.size();++i) branching[i]=new vec<Lit>();
+  //std::cerr<<"brcond:"<<branch_cond<<std::endl;
   for(size_t ul=0;ul<=qlev;++ul){
     if(level_type(ul)!=UNIVERSAL) continue;
     assert(branch_cond.size()>=ul);
-    if(ul==qlev) branching[qlev].push(~mkLit(s(qlev,group)));
-    else branching[ul].push(~branch_cond[ul]);
+    if(ul==qlev) branching[qlev]->push(~mkLit(s(qlev,group)));
+    else branching[ul]->push(~branch_cond[ul]);
   }
   vector<Lit> branch_cond_new(qlev+1);
   for(size_t child_index=0;child_index<children.size();++child_index){
@@ -466,15 +470,16 @@ if(children.size()){
       if(level_type(ul)!=UNIVERSAL) continue;
       const auto br=mkLit(abstractions[ul].newVar());
       if(verb>5)std::cerr<<"brlit@"<<ul<<":"<<br<<std::endl;
-      branching[ul].push(br);
+      branching[ul]->push(br);
       branch_cond_new[ul]=br;
     }
     encode_resdep(gin,branch_cond_new,current_literals,children[child_index]);
   }
   for(size_t ul=0;ul<=qlev;++ul){
     if(level_type(ul)!=UNIVERSAL) continue;;
-    if(verb>5)std::cerr<<"abrc@"<<ul<<":"<<branching[ul]<<std::endl;
-    abstractions[ul].addClause_(branching[ul]);
+    if(verb>5)std::cerr<<"abrc@"<<ul<<":"<<*(branching[ul])<<std::endl;
+    abstractions[ul].addClause_(*(branching[ul]));
+    delete branching[ul];
   }
 }
 
