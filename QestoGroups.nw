@@ -233,7 +233,7 @@ inline SInfo get_info(Var s) const;
 bool QestoGroups::analyze(size_t qlev,const vec<Lit>& trail,
                     size_t& bt_qlev,vec<Lit>& conflict_clause) {
   QuantifierType loser=level_type(qlev);
-  if(verb>2)std::cerr<<"analyse loser:"<<loser<<"@"<<qlev<<std::endl;
+  if(verb>2)std::cerr<<"("<<tot_bt_count<<") analyse loser:"<<loser<<"@"<<qlev<<std::endl;
   return loser==EXISTENTIAL ? analyze_exists(qlev,trail,bt_qlev,conflict_clause)
                             : analyze_univ(qlev,trail,bt_qlev,conflict_clause);
 }
