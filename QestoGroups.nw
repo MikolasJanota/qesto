@@ -474,15 +474,13 @@ if(children.size()){
     else branching[ul]->push(~branch_cond[ul]);
   }
   vector<Lit> branch_cond_new(qlev+1);
-  for(size_t child_index=0;child_index<children.size();++child_index){
+  const auto csz=children.size();
+  for(size_t child_index=0;child_index<csz;++child_index){
     if(verb>5)std::cerr<<"child gr:"<<children[child_index]<<std::endl;
     for(size_t ul=0;ul<=qlev;++ul){
       if(level_type(ul)!=UNIVERSAL) continue;
-      const auto br=level_type(qlev)==UNIVERSAL
-                    &&ul<qlev
-                    &&groups.lits(children[child_index]).empty() ?
-                      branch_cond[ul]
-                     :mkLit(abstractions[ul].newVar());
+      const auto br=ul<qlev&&csz==1 ? branch_cond[ul]
+                                    :mkLit(abstractions[ul].newVar());
       if(verb>5)std::cerr<<"brlit@"<<ul<<":"<<br<<std::endl;
       branching[ul]->push(br);
       branch_cond_new[ul]=br;
