@@ -34,11 +34,13 @@ QestoGroups::QestoGroups(const Options& opt,
   assert(levs.lev_count());
   assert(levs.level_type(levs.lev_count()-1)==EXISTENTIAL);
   init();
-  for(size_t ul=0;ul<levs.lev_count();++ul){
-    const auto& gs=groups.groups(ul);
-    size_t c=0;
-    FOR_EACH(gi,gs) if(groups.lits(*gi).empty())++c;
-    std::cerr<<"gs@l"<<ul<<":"<<gs.size()<<" e:"<<c<<std::endl;
+  if(verb>5){
+    for(size_t ul=0;ul<levs.lev_count();++ul){
+      const auto& gs=groups.groups(ul);
+      size_t c=0;
+      FOR_EACH(gi,gs) if(groups.lits(*gi).empty())++c;
+      std::cerr<<"gs@l"<<ul<<":"<<gs.size()<<" e:"<<c<<std::endl;
+    }
   }
 }
 
@@ -74,8 +76,8 @@ SATSPC::MiniSatExt* abstractions;
 <<implementation>>=
 void QestoGroups::init(){
   init_abstractions();
-  <<init svars>>
   <<init game rules>>
+  <<init svars>>
   if(opt.get_ex_inst()){
     inst_e();
   }
@@ -126,14 +128,14 @@ for(size_t qlev=0;qlev<levs.lev_count();++qlev){
   FOR_EACH(gi,gs) aux.push(mkLit(s(qlev,*gi)));
   abstractions[qlev].addClause_(aux);
 }
-{ const auto sz=levs.lev_count();
+{ const auto sz=levs.lev_count();//dummy level
   vector<size_t> gs=groups.groups(sz-1);
   aux.clear();
   FOR_EACH(gi,gs) aux.push(mkLit(s(sz-1,*gi)));
   abstractions[sz].addClause_(aux);
 }
 
-FOR_EACH(gi,groups.groups(levs.lev_count()-1)) {
+FOR_EACH(gi,groups.groups(levs.lev_count()-1)) {//TODO implement better
   size_t ql=levs.lev_count()-1;
   size_t meql=levs.lev_count()-1;
   auto group=*gi;
@@ -147,7 +149,6 @@ FOR_EACH(gi,groups.groups(levs.lev_count()-1)) {
       egroup=group;
     }
   }
-  if(verb>3)std::cerr<<"mq: "<<meql<<std::endl;
   abstractions[meql].addClause(~mkLit(s(meql,egroup)));
 }
 

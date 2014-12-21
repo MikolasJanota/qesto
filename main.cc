@@ -21,6 +21,9 @@ int main(int argc, char** argv) {
   signal(SIGINT, SIG_handler);
   signal(SIGABRT, SIG_handler);
   signal(SIGUSR1, SIG_handler);
+#ifndef NDEBUG
+  cout << "c DEBUG version." << endl;
+#endif
   Options options;
   if (!options.parse(argc, argv)) {
     cerr << "ERROR: processing options." << endl;
