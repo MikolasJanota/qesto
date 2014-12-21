@@ -392,15 +392,18 @@ at least one clause in that group is resolvable. And by resolvable we mean
 that there exists another clause with a complementary literal.
 <<implementation>>=
 void QestoGroups::encode_resdep(){
+#if DEBUG
   for(size_t ul=0;ul<=levs.lev_count();++ul){
     abstractions[ul].new_variables((ul+1)*100-1);
   }
+#endif
   const GroupInversion gin(groups);
   const auto& gs=groups.groups(0);
   vector<Lit> branch_cond;
   LitBitSet current_literals;
+  vector<bool> empty_lev(levs.lev_count(),false);
   FOR_EACH (group_index, gs) {
-    encode_resdep(gin,branch_cond,current_literals,*group_index);
+    encode_resdep(gin,branch_cond,current_literals,empty_lev,*group_index);
   }
 }
 
@@ -410,11 +413,13 @@ void QestoGroups::encode_resdep(
   const GroupInversion& gin,
   const vector<Lit>& branch_cond,
   LitBitSet& current_literals,
+  vector<bool>& empty_lev,
   size_t group) {
   if(verb>5)std::cerr<<"encode_resdep:"<<group<<std::endl;
   const auto& literals = groups.lits(group);
   const auto qlev = groups.qlev(group);
   FOR_EACH(li,literals) current_literals.add(*li);
+  empty_lev[qlev]=literals.empty();
   if(group_type(group)==EXISTENTIAL) {
     <<resdep existential group>>
   }
@@ -443,7 +448,8 @@ for(size_t pivot_index=0; pivot_index<literals.size(); ++pivot_index){
                       resolvables);
   vec<Lit> aux;
   for(size_t ul=0;ul<qlev;++ul){
-    if(level_type(ul)!=UNIVERSAL) continue;
+    if(level_type(ul)!=UNIVERSAL||empty_lev[ul])
+      continue;
     assert(branch_cond.size()>ul);
     aux.clear();
     aux.push(~(branch_cond[ul]));
@@ -477,7 +483,7 @@ if(children.size()){
   for(size_t child_index=0;child_index<children.size();++child_index){
     if(verb>5)std::cerr<<"child gr:"<<children[child_index]<<std::endl;
     for(size_t ul=0;ul<=qlev;++ul){
-      if(level_type(ul)!=UNIVERSAL) continue;
+      if(level_type(ul)!=UNIVERSAL||empty_lev[ul]) continue;
       const auto br=level_type(qlev)==UNIVERSAL
                     &&ul<qlev
                     &&groups.lits(children[child_index]).empty() ?
@@ -487,10 +493,11 @@ if(children.size()){
       branching[ul]->push(br);
       branch_cond_new[ul]=br;
     }
-    encode_resdep(gin,branch_cond_new,current_literals,children[child_index]);
+    encode_resdep(gin,branch_cond_new,current_literals,empty_lev,children[child_index]);
   }
   for(size_t ul=0;ul<=qlev;++ul){
-    if(level_type(ul)!=UNIVERSAL) continue;;
+    if(level_type(ul)!=UNIVERSAL||empty_lev[ul])
+      continue;
     if(verb>5)std::cerr<<"abrc@"<<ul<<":"<<*(branching[ul])<<std::endl;
     abstractions[ul].addClause_(*(branching[ul]));
     ++rescount;
@@ -696,5 +703,6 @@ void encode_resdep(
   const GroupInversion& gin,
   const vector<Lit>& branch_cond,
   LitBitSet& current_literals,
+  vector<bool>& empty_lev,
   size_t group);
 Lit smax(size_t qlev,size_t group,vector<bool>& svals);
