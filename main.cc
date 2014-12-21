@@ -71,7 +71,7 @@ int main(int argc, char** argv) {
   LevelInfo levs(qf.pref);
   Groups* grs=NULL;
   if(options.get_groups()) {
-    grs=new Groups(levs,qf);
+    grs=new Groups(options,levs,qf);
     gps=new QestoGroups(options,levs,*grs);
     r=gps->solve();
     std::cout<<"c bt_count: "<<gps->get_btcount()<<std::endl;

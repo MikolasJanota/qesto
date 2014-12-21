@@ -85,6 +85,7 @@ void QestoGroups::init(){
      std::cerr<<"c resdep init start:"<<read_cpu_time()<<std::endl;
      encode_resdep();
      std::cerr<<"c resdep init end:"<<read_cpu_time()<<std::endl;
+     std::cerr<<"c rescount:"<<rescount<<std::endl;
   }
 }
 
@@ -391,6 +392,9 @@ at least one clause in that group is resolvable. And by resolvable we mean
 that there exists another clause with a complementary literal.
 <<implementation>>=
 void QestoGroups::encode_resdep(){
+  for(size_t ul=0;ul<=levs.lev_count();++ul){
+    abstractions[ul].new_variables((ul+1)*100-1);
+  }
   const GroupInversion gin(groups);
   const auto& gs=groups.groups(0);
   vector<Lit> branch_cond;
@@ -413,9 +417,8 @@ void QestoGroups::encode_resdep(
   FOR_EACH(li,literals) current_literals.add(*li);
   if(group_type(group)==EXISTENTIAL) {
     <<resdep existential group>>
-  } //else {
-  <<resdep universal group>>
-  //}
+  }
+  <<resdep recursion>>
   FOR_EACH(li,literals) {
     const bool rml=current_literals.remove(*li);
     if(!rml)assert(0);
@@ -451,13 +454,14 @@ for(size_t pivot_index=0; pivot_index<literals.size(); ++pivot_index){
     }
     if(verb>5)std::cerr<<"ebrc@"<<ul<<":"<<aux<<std::endl;
     abstractions[ul].addClause_(aux);
+    ++rescount;
   }
 }
 
 @ For each child and upstream level generating new branching variable.
 given the parent benching condition, require that at least on one of the
 current ones we branch.
-<<resdep universal group>>=
+<<resdep recursion>>=
 const auto& children=groups.get_children(group);
 if(children.size()){
   vector<vec<Lit>* > branching(qlev+1);
@@ -471,9 +475,14 @@ if(children.size()){
   }
   vector<Lit> branch_cond_new(qlev+1);
   for(size_t child_index=0;child_index<children.size();++child_index){
+    if(verb>5)std::cerr<<"child gr:"<<children[child_index]<<std::endl;
     for(size_t ul=0;ul<=qlev;++ul){
       if(level_type(ul)!=UNIVERSAL) continue;
-      const auto br=mkLit(abstractions[ul].newVar());
+      const auto br=level_type(qlev)==UNIVERSAL
+                    &&ul<qlev
+                    &&groups.lits(children[child_index]).empty() ?
+                      branch_cond[ul]
+                     :mkLit(abstractions[ul].newVar());
       if(verb>5)std::cerr<<"brlit@"<<ul<<":"<<br<<std::endl;
       branching[ul]->push(br);
       branch_cond_new[ul]=br;
@@ -484,6 +493,7 @@ if(children.size()){
     if(level_type(ul)!=UNIVERSAL) continue;;
     if(verb>5)std::cerr<<"abrc@"<<ul<<":"<<*(branching[ul])<<std::endl;
     abstractions[ul].addClause_(*(branching[ul]));
+    ++rescount;
     delete branching[ul];
   }
 }

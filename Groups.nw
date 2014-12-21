@@ -11,7 +11,7 @@ class Groups{public:<<public members>>
 #endif
 
 <<public members>>=
-Groups(const LevelInfo& levs,const QFla& fla)
+Groups(const Options& opt, const LevelInfo& levs,const QFla& fla)
 <<fields init>>
 {
   for(size_t index = 0; index<fla.cnf.size(); ++index)
@@ -63,6 +63,7 @@ inline bool is_group(const Node& n) const
 {return (n.gid)<group_count;}
 
 <<private members>>=
+const Options& opt;
 const LevelInfo& levs;
 const QFla& fla;
 Node root;
@@ -73,7 +74,8 @@ vector<size_t> gr2qlev;
 vector<vector<size_t> >  grouped_levels;
 
 <<fields init>>=
-:levs(levs)
+:opt(opt)
+,levs(levs)
 ,fla(fla)
 ,group_count(0)
 ,grouped_levels(levs.lev_count())
@@ -179,12 +181,14 @@ size_t Groups::add_group(LitSet ls, size_t ql, size_t parent_group){
   gr2parent[gid]=ql?parent_group:gid;
   gr2qlev[gid]=ql;
   grouped_levels[ql].push_back(gid);
-//  std::cerr<<"-----"<<std::endl;
-//  std::cerr<<"gr: "<<gid<<std::endl;
-//  std::cerr<<"ls: ["<<gr2lits[gid]<<"]\n";
-//  std::cerr<<"ql: "<<gr2qlev[gid]<<std::endl;
-//  std::cerr<<"par: "<<gr2parent[gid]<<std::endl;
-//  std::cerr<<"-----"<<std::endl;
+  if(opt.get_verbose()>5){
+    std::cerr<<"-----"<<std::endl;
+    std::cerr<<"gr: "<<gid<<std::endl;
+    std::cerr<<"ls: ["<<gr2lits[gid]<<"]\n";
+    std::cerr<<"ql: "<<gr2qlev[gid]<<std::endl;
+    std::cerr<<"par: "<<gr2parent[gid]<<std::endl;
+    std::cerr<<"-----"<<std::endl;
+  }
   return gid;
 }
 
@@ -267,6 +271,7 @@ size_t Groups::qlev(size_t gid) const {
 }
 
 <<h includes>>=
+#include "Options.hh"
 #include "DataStructures.hh"
 #include "LevelInfo.hh"
 #include "LitBitSet.hh"
