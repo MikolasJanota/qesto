@@ -448,8 +448,8 @@ for(size_t pivot_index=0; pivot_index<literals.size(); ++pivot_index){
                       resolvables);
   vec<Lit> aux;
   for(size_t ul=0;ul<qlev;++ul){
-    if(level_type(ul)!=UNIVERSAL||empty_lev[ul])
-      continue;
+    //if(level_type(ul)!=UNIVERSAL||empty_lev[ul])
+    if(level_type(ul)!=UNIVERSAL) continue;
     assert(branch_cond.size()>ul);
     aux.clear();
     aux.push(~(branch_cond[ul]));
@@ -484,7 +484,8 @@ if(children.size()){
   for(size_t child_index=0;child_index<csz;++child_index){
     if(verb>5)std::cerr<<"child gr:"<<children[child_index]<<std::endl;
     for(size_t ul=0;ul<=qlev;++ul){
-      if(level_type(ul)!=UNIVERSAL||empty_lev[ul]) continue;
+      //if(level_type(ul)!=UNIVERSAL||empty_lev[ul]) continue;
+      if(level_type(ul)!=UNIVERSAL) continue;
       const auto br=ul<qlev&&csz==1 ? branch_cond[ul]
                                     : mkLit(abstractions[ul].newVar());
       if(verb>5)std::cerr<<"brlit@"<<ul<<":"<<br<<std::endl;
@@ -494,8 +495,8 @@ if(children.size()){
     encode_resdep(gin,branch_cond_new,current_literals,empty_lev,children[child_index]);
   }
   for(size_t ul=0;ul<=qlev;++ul){
-    if(level_type(ul)!=UNIVERSAL||empty_lev[ul])
-      continue;
+    //if(level_type(ul)!=UNIVERSAL||empty_lev[ul]) continue;
+    if(level_type(ul)!=UNIVERSAL) continue;
     if(verb>5)std::cerr<<"abrc@"<<ul<<":"<<*(branching[ul])<<std::endl;
     abstractions[ul].addClause_(*(branching[ul]));
     ++rescount;
