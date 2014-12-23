@@ -8,6 +8,7 @@
 <<h includes>>
 class Groups{public:<<public members>>
              private:<<private members>>};
+<<inline implementation>>
 #endif
 
 <<public members>>=
@@ -22,11 +23,12 @@ Groups(const Options& opt, const LevelInfo& levs,const QFla& fla)
 }
 
 <<public members>>=
-size_t parent(size_t gid) const;
-const vector<size_t>& groups(size_t qlev) const;
-const LitSet& lits(size_t gid) const;
-size_t qlev(size_t gid) const;
-const vector<size_t>& get_children(size_t group);
+inline size_t parent(size_t gid) const;
+inline bool is_end(size_t gid) const;
+inline const vector<size_t>& groups(size_t qlev) const;
+inline const LitSet& lits(size_t gid) const;
+inline size_t qlev(size_t gid) const;
+inline const vector<size_t>& get_children(size_t group);
 
 <<Groups.cc>>=
 #include "Groups.hh"
@@ -59,8 +61,7 @@ struct Node {
 inline const LevelInfo& get_levs() const {return levs;}
 inline const Node* get_groups() const {return &root;}
 inline size_t get_group_count() const {return group_count;}
-inline bool is_group(const Node& n) const
-{return (n.gid)<group_count;}
+inline bool is_group(const Node& n) const {return (n.gid)<group_count;}
 
 <<private members>>=
 const Options& opt;
@@ -69,6 +70,7 @@ const QFla& fla;
 Node root;
 size_t group_count;
 vector<LitSet> gr2lits;
+vector<bool> gr2end;
 vector<size_t> gr2parent;
 vector<size_t> gr2qlev;
 vector<vector<size_t> >  grouped_levels;
@@ -153,7 +155,7 @@ void Groups::gen_groups(Node& n,
       break;
     }
   }
-  n.gid=new_group ? add_group(LitSet(accum),ql,parent_group) : -1;
+  n.gid=new_group ? add_group(n.is_end,LitSet(accum),ql,parent_group) : -1;
   vector<Lit> new_accum;
   FOR_EACH(i,n.es) {
     if(i->ql!=ql){
@@ -172,11 +174,13 @@ void Groups::gen_groups(Node& n,
 }
 
 <<implementation>>=
-size_t Groups::add_group(LitSet ls, size_t ql, size_t parent_group){
+size_t Groups::add_group(bool is_end, LitSet ls, size_t ql, size_t parent_group){
   const size_t gid=group_count++;
+  gr2end.resize(gid+1);
   gr2lits.resize(gid+1);
   gr2parent.resize(gid+1);
   gr2qlev.resize(gid+1);
+  gr2end[gid]=is_end;
   gr2lits[gid]=ls;
   gr2parent[gid]=ql?parent_group:gid;
   gr2qlev[gid]=ql;
@@ -226,7 +230,7 @@ vector<vector<size_t> > children;
 <<fields init>>=
 , children_computed(false)
 
-<<implementation>>=
+<<inline implementation>>=
 const vector<size_t>& Groups::get_children(size_t group) {
   assert(group<group_count);
   if(!children_computed) gen_child_relation();
@@ -246,25 +250,31 @@ void Groups::gen_child_relation(){
   }
 }
 
-<<implementation>>=
+<<inline implementation>>=
 size_t Groups::parent(size_t gid) const{
   assert(gid<group_count);
   return gr2parent[gid];
 }
 
-<<implementation>>=
+<<inline implementation>>=
 const vector<size_t>& Groups::groups(size_t qlev) const {
   assert(qlev<levs.lev_count());
   return grouped_levels[qlev];
 }
 
-<<implementation>>=
+<<inline implementation>>=
+bool Groups::is_end(size_t gid) const {
+  assert(gid<group_count);
+  return gr2end[gid];
+}
+
+<<inline implementation>>=
 const LitSet& Groups::lits(size_t gid) const {
   assert(gid<group_count);
   return gr2lits[gid];
 }
 
-<<implementation>>=
+<<inline implementation>>=
 size_t Groups::qlev(size_t gid) const {
   assert(gid<group_count);
   return gr2qlev[gid];
@@ -284,6 +294,6 @@ bool add_clause(size_t clause_index);
 void del_subtree(Node* n);
 void gen_groups();
 void gen_groups(Node& n, size_t ql, size_t parent_group, vector<Lit>& accum);
-size_t add_group(LitSet ls, size_t ql, size_t parent_group);
+size_t add_group(bool is_end, LitSet ls, size_t ql, size_t parent_group);
 void empty_subtree(Node* n,size_t ql);
 void gen_child_relation();
