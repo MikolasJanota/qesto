@@ -351,59 +351,43 @@ if(issat){
 
 <<implementation>>=
 void QestoGroups::inst_e(){
-  vector<const Groups::Node*> accum;
-  vector<Groups::Edge> eaccum;
-  inst_e(groups.get_groups(),accum,eaccum);
+  FOR_EACH(g,groups.groups(0)) inst_e(*g);
 }
 
 <<implementation>>=
-void QestoGroups::inst_e(const Groups::Node* n,
-                         vector<const Groups::Node*>& accum,
-                         vector<Groups::Edge>& eaccum){
-  if(n->es.empty()&&groups.is_group(*n)) {
+void QestoGroups::inst_e(size_t group) {
+  if(groups.is_end(group)) {
     vec<Lit> cl;
-    auto* gn=n;
-    size_t i=accum.size();
-    while(i) {
-      --i;
-      const auto& e=(eaccum[i]);
-      const auto& n=*(accum[i]);
-      if(i<eaccum.size()) {//TODO:needed?
-        if(level_type(e.ql)==EXISTENTIAL&&e.l!=lit_Undef) {
-          cl.push(e.l);
-        }
+    while(1) {
+      const auto qlev=groups.qlev(group);
+      const auto qt=level_type(qlev);
+      if(qt==EXISTENTIAL){
+        cl.push(~mkLit(s(qlev,group)));
+        abstractions[qlev].addClause(cl);
+        cl.pop();
+        const auto& ls=groups.lits(group);
+        FOR_EACH(li,ls) cl.push(*li);
       }
-      if(cl.size()
-        && (!i||groups.is_group(n))
-        && level_type(groups.qlev(gn->gid))==EXISTENTIAL
-        ) {
-        if(!i) {
-          assert(level_type(0)==EXISTENTIAL);
-          if(verb>5)std::cerr<<"e acl:"<<0<<std::endl;
-          abstractions[0].addClause(cl);
-        } else {
-          const auto ql=groups.qlev(n.gid);
-          cl.push(~mkLit(s(ql,n.gid)));
-          if(verb>5)std::cerr<<"e acl:"<<ql+1<<std::endl;
-          abstractions[ql+1].addClause(cl);
-          cl.pop();
-        }
+      if(!qlev) break;
+      group=groups.parent(group);
+    }
+  } else {
+    bool cut=false;
+    if(group_type(group)==UNIVERSAL) {
+      const auto& literals=groups.lits(group);
+      FOR_EACH(li,literals) {
+        if(!sign(*li)) continue;
+        cut=true;
+        break;
       }
-      if(groups.is_group(n)) gn=accum[i];
+    }
+    if(!cut){
+      const auto& children = groups.get_children(group);
+      FOR_EACH(ci,children) inst_e(*ci);
     }
   }
-
-  accum.push_back(n);
-  FOR_EACH(i,n->es) {
-    const Lit l=i->l;
-    if(l!=lit_Undef&&levs.type(l)==UNIVERSAL&&sign(l))
-      continue;
-    eaccum.push_back(*i);
-    inst_e(i->n,accum,eaccum);
-    eaccum.pop_back();
-  }
-  accum.pop_back();
 }
+
 
 <<private members>>=
 size_t rescount;
@@ -713,6 +697,7 @@ size_t find_parent(size_t qlev,size_t group);
 bool find_sat_lit(size_t group,Lit& l);
 void allocate_selectors();
 void inst_e();
+void inst_e(size_t group);
 void encode_resdep();
 void inst_e(const Groups::Node* n,
     vector<const Groups::Node*>& accum,
