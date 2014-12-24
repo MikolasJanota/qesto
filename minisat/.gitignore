@@ -5,3 +5,4 @@
 *.op
 *.os
 *.a
+depend.mk
