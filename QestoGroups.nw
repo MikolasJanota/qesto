@@ -25,6 +25,7 @@ class QestoGroups {
 <<c includes>>
 <<implementation>>
 
+@ \section{Initialization}
 <<implementation>>=
 QestoGroups::QestoGroups(const Options& opt,
                          const LevelInfo& levs,
@@ -58,21 +59,21 @@ Groups& groups;
 , groups(groups)
 
 @ We introduce variables $s_k^G$ which indicate that the group $G$ is
-\emph{selected} at the quantification level $k$. If the variable is false, then we say that the
-group is \emph{deselected}.
+\emph{selected} at the quantification level $k$. If the variable is false,
+then we say that the group is \emph{deselected}.
 <<private methods>>=
 inline Var s(size_t quant_level,size_t group_index) const;
 
-@ For each  quantification level, we create a SAT solver, which stores the abstraction
-for that level. To obtain a more uniform implementation, there is an \emph{additional
-  level} representing the universal player.
+@ For each  quantification level, we create a SAT solver, which stores the
+abstraction for that level. To obtain a more uniform implementation, there is
+an \emph{additional level} representing the universal player.
 <<private members>>=
 SATSPC::MiniSatExt* abstractions;
 <<fields init>>=
 , abstractions(new SATSPC::MiniSatExt[levs.lev_count()+1])
 
-
-@ Before solving the abstractions must be initialized with requirements on the $s$ variables.
+@ Before solving, the abstractions must be initialized with requirements on
+the~$s$ variables.
 <<implementation>>=
 void QestoGroups::init(){
   allocate_selectors();
@@ -118,17 +119,14 @@ void QestoGroups::init_svars() {
   }
 }
 
-@ At all universal levels, the universal player must select at least one group
-(otherwise it immediately loses). At all existential levels $k$, the
-existential player must \emph{deselect} all groups whose highest existential
-literal is at level$\leq k$.
-
 <<implementation>>=
 void QestoGroups::init_game_rules(){
   init_game_rules_univ();
   init_game_rules_exists();
 }
 
+@ At all universal levels, the universal player must select at least one group
+(otherwise it immediately loses).
 <<implementation>>=
 void QestoGroups::init_game_rules_univ() {
   vec<Lit> aux;
@@ -147,6 +145,8 @@ void QestoGroups::init_game_rules_univ() {
   abstractions[sz].addClause_(aux);
 }
 
+@ At all existential levels~$k$, the existential player must \emph{deselect}
+all groups whose highest existential literal is at level$\leq k$.
 <<implementation>>=
 void QestoGroups::init_game_rules_exists(){
   FOR_EACH(g,groups.groups(0))
@@ -167,7 +167,9 @@ bool QestoGroups::init_game_rules_exists(size_t group){
   return all_universal;
 }
 
-@ The solver assigns values to variables, starting from the outermost block of
+@ \section{Solving}
+
+The solver assigns values to variables, starting from the outermost block of
 the prefix. For each block it uses the corresponding abstraction to obtain
 the values.  If an abstraction becomes unsatisfiable, the solver
 \emph{backtracks}. Note that at some point at least one abstraction must
@@ -241,8 +243,8 @@ bool QestoGroups::solve() {
   return status==l_True;
 }
 
-@ During the  conflict analysis we will also need a mapping from $s^k_C$ variables
-to the information about them.
+@ During the  conflict analysis we will also need a mapping from $s^k_C$
+variables to the information about them.
 <<private members>>=
 struct SInfo {
   size_t qlev;
@@ -252,7 +254,8 @@ struct SInfo {
 <<private methods>>=
 inline SInfo get_info(Var s) const;
 
-@ As the analysis is quite differmmment for the two players, we separat it into different procedures.
+@ As the analysis is quite  different for the two players, we separate it
+into two respective procedures.
 <<implementation>>=
 bool QestoGroups::analyze(size_t qlev,const vec<Lit>& trail,
                     size_t& bt_qlev,vec<Lit>& conflict_clause) {
@@ -322,14 +325,14 @@ bool QestoGroups::analyze_univ(size_t qlev,const vec<Lit>& trail,
   return true;
 }
 
-@ For the current group we compute what the highest qualification level of
-a satisfied existential literal \emph{before} the conflict quantification level.
-We store this value into [[ex_maxlev[i]]] (it stays [[-1]] if no ex.\ lit satisfies the clause).
-Concurrently we compute the highest quantification level of a universal
-literal (and store it into [[uni_satlev]]).  If a clause is satisfied only by
-universal literals and lits after the conflict lev,
-the maximal quantification level of the satisifying universal is used to
-update the backtracking level (because only such clauses can be enforced by the
+@ For the current group we compute what the highest qualification level of a
+satisfied existential literal \emph{before} the conflict quantification level.
+We store this value into [[ex_maxlev[i]]] (it stays [[-1]] if no ex.\ lit
+satisfies the clause).  Concurrently we compute the highest quantification
+level of a universal literal (and store it into [[uni_satlev]]).  If a clause
+is satisfied only by universal literals and lits after the conflict lev, the
+maximal quantification level of the satisifying universal is used to update
+the backtracking level (because only such clauses can be enforced by the
 universal player).
 <<update max levels>>=
 Lit sat_lit;
@@ -348,6 +351,11 @@ if(issat){
 } else {
   all_opponent=false;
 }
+
+@ \section{Additional Encoding}
+
+@ For each sequence of groups that represents a clause, set all universal
+variables to false, and .
 
 <<implementation>>=
 void QestoGroups::inst_e(){
@@ -387,7 +395,6 @@ void QestoGroups::inst_e(size_t group) {
     }
   }
 }
-
 
 <<private members>>=
 size_t rescount;
@@ -439,13 +446,12 @@ void QestoGroups::encode_resdep(
   }
 }
 
-@  For each literal, compute the set of groups,
-at the same quantification level is literal, that enable the literal to be
-resolved. For each  universal quantification level [[ul]]
-upstream of the current group, generate the condition that if of this branch
-is selected then also one of these groups have to be selected--- but here he
-we need to adjust this group to the right quantification level by computing
-the parent at [[ul]].
+@  For each literal, compute the set of groups, at the same quantification
+level is literal, that enable the literal to be resolved. For each  universal
+quantification level [[ul]] upstream of the current group, generate the
+condition that if of this branch is selected then also one of these groups
+have to be selected--- but here he we need to adjust this group to the right
+quantification level by computing the parent at [[ul]].
 <<resdep existential group>>=
 vector<size_t> resolvables;
 for(size_t pivot_index=0; pivot_index<literals.size(); ++pivot_index){
@@ -550,6 +556,8 @@ void QestoGroups::compute_resolvables(const GroupInversion& gin,
   }
 }
 
+@ \section{Auxiliary Functions}
+
 <<implementation>>=
 size_t QestoGroups::find_parent(size_t qlev,size_t group) {
    assert(groups.qlev(group)>=qlev);
@@ -641,8 +649,7 @@ inline QestoGroups::SInfo QestoGroups::get_info(Var s) const {
 
 <<private methods>>=
 inline QuantifierType group_type(size_t gid) {
-  return level_type(groups.qlev(gid));
-}
+  return level_type(groups.qlev(gid)); }
 
 <<private methods>>=
 inline QuantifierType level_type(size_t qlev) {
