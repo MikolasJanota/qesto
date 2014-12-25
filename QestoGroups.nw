@@ -293,6 +293,7 @@ bool QestoGroups::analyze_exists(size_t qlev,
   bt_qlev=-1;
   for(int i=0;i<abstraction_conflict.size();++i) {
     const Lit l=abstraction_conflict[i];
+    if((bt_qlev+2)>=qlev) break;
     if(!sign(l)) continue;
     auto pg=get_pinfo(qlev,var(l)).group;
     while(1){
@@ -311,7 +312,7 @@ bool QestoGroups::analyze_exists(size_t qlev,
   }
   if(all_opponent) return false;
   assert(bt_qlev<=(qlev-2));
-  //if((qlev-2)>bt_qlev)std::cerr<<"long jump"<<std::endl; 
+  if(verb>2&&(qlev-2)>bt_qlev)std::cerr<<"long jump"<<std::endl;
   if(verb>2)std::cerr<<"bt_qlev:"<<bt_qlev<<std::endl;
   for(int i=0;i<abstraction_conflict.size();++i) {
     const Lit l=abstraction_conflict[i];
@@ -392,7 +393,6 @@ if(issat){
 
 @ For each sequence of groups that represents a clause, set all universal
 variables to false, and TODO.
-
 <<implementation>>=
 void QestoGroups::inst_e(){
   FOR_EACH(g,groups.groups(0)) inst_e(*g);
@@ -402,18 +402,21 @@ void QestoGroups::inst_e(){
 void QestoGroups::inst_e(size_t group) {
   if(groups.is_end(group)) {
     vec<Lit> cl;
-    while(1) {
-      const auto qlev=groups.qlev(group);
-      const auto qt=level_type(qlev);
-      if(qt==EXISTENTIAL){
+    bool last=true;
+    for(auto qlev=groups.qlev(group)+1;
+        qlev--;
+        group=groups.parent(group))
+    {
+      std::cerr<<"gr:"<<group<<"@"<<qlev<<std::endl;
+      if(level_type(qlev)!=EXISTENTIAL) continue;
+      if(!last){
         cl.push(~mkLit(s(qlev,group)));
         abstractions[qlev].addClause(cl);
         cl.pop();
-        const auto& ls=groups.lits(group);
-        FOR_EACH(li,ls) cl.push(*li);
-      }
-      if(!qlev) break;
-      group=groups.parent(group);
+      } else {
+        last=false; }
+      const auto& ls=groups.lits(group);
+      FOR_EACH(li,ls) cl.push(*li);
     }
   } else {
     bool cut=false;
