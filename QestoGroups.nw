@@ -236,7 +236,8 @@ if(!resolved) { //formula true iff universal lost
   return level_type(qlev)==UNIVERSAL?l_True:l_False;
 } else {
   assert(qlev>bt_qlev);
-  if(verb>3)std::cerr<<"cc: "<<conflict_clause<<std::endl;
+  if(verb>3)std::cerr<<"cc:"<<conflict_clause<<std::endl;
+  if(verb>2)std::cerr<<"cc sz:"<<conflict_clause.size()<<std::endl;
   abstractions[bt_qlev].addClause_(conflict_clause);
   qlev=bt_qlev;
 }
@@ -287,9 +288,31 @@ bool QestoGroups::analyze_exists(size_t qlev,
                           size_t& bt_qlev,vec<Lit>& conflict_clause) {
   assert(level_type(qlev)==EXISTENTIAL);
   if(qlev<2) return false;
-  bt_qlev=qlev-2;
-  if(verb>2)std::cerr<<"bt_qlev:"<<bt_qlev<<std::endl;
   const auto& abstraction_conflict=abstractions[qlev].conflict;
+  bool all_opponent=true;
+  bt_qlev=-1;
+  for(int i=0;i<abstraction_conflict.size();++i) {
+    const Lit l=abstraction_conflict[i];
+    if(!sign(l)) continue;
+    auto pg=get_pinfo(qlev,var(l)).group;
+    while(1){
+      const auto ppg=groups.parent(pg);
+      if(ppg==pg)break;
+      pg=ppg;
+      const auto pql=groups.qlev(pg);
+      const auto pqt=level_type(pql);
+      if(pqt==UNIVERSAL) continue;
+      if(groups.lits(pg).size()) {
+        if(all_opponent||pql>bt_qlev)bt_qlev=pql;
+        all_opponent=false;
+        break;
+      }
+    }
+  }
+  if(all_opponent) return false;
+  assert(bt_qlev<=(qlev-2));
+  //if((qlev-2)>bt_qlev)std::cerr<<"long jump"<<std::endl; 
+  if(verb>2)std::cerr<<"bt_qlev:"<<bt_qlev<<std::endl;
   for(int i=0;i<abstraction_conflict.size();++i) {
     const Lit l=abstraction_conflict[i];
     if(!sign(l)) continue;
