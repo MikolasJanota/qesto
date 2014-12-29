@@ -407,7 +407,6 @@ void QestoGroups::inst_e(size_t group) {
         qlev--;
         group=groups.parent(group))
     {
-      std::cerr<<"gr:"<<group<<"@"<<qlev<<std::endl;
       if(level_type(qlev)!=EXISTENTIAL) continue;
       if(!last){
         cl.push(~mkLit(s(qlev,group)));
