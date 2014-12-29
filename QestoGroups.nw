@@ -235,7 +235,7 @@ FOR_EACH(gi,groups.groups(qlev)) {
 ++tot_bt_count;
 conflict_clause.clear();
 size_t bt_qlev=-1;
-const bool resolved=analyze(qlev,/*out*/bt_qlev,/*out*/conflict_clause);
+const bool resolved=analyze(qlev,svals,/*out*/bt_qlev,/*out*/conflict_clause);
 if(!resolved) { //formula true iff universal lost
   return level_type(qlev)==UNIVERSAL?l_True:l_False;
 } else {
@@ -275,12 +275,12 @@ inline PInfo get_pinfo(size_t qlev,Var p) const;
 @ As the analysis is quite  different for the two players, we separate it
 into two respective procedures.
 <<implementation>>=
-bool QestoGroups::analyze(size_t qlev,
+bool QestoGroups::analyze(size_t qlev,const vector<bool>& svals,
                     size_t& bt_qlev,vec<Lit>& conflict_clause) {
   QuantifierType loser=level_type(qlev);
   if(verb>2)std::cerr<<"("<<tot_bt_count<<") analyse loser:"<<loser<<"@"<<qlev<<std::endl;
   return loser==EXISTENTIAL ? analyze_exists(qlev,bt_qlev,conflict_clause)
-                            : analyze_univ(qlev,bt_qlev,conflict_clause);
+                            : analyze_univ(qlev,svals,bt_qlev,conflict_clause);
 }
 
 @ We start with a unsatisfiable core from the abstraction at the conflict
@@ -339,13 +339,13 @@ always replicate these moves.
 <<private members>>=
 vector<int> ex_maxlev;// maximum lev of satisfying ex lit
 <<implementation>>=
-bool QestoGroups::analyze_univ(size_t qlev,
+bool QestoGroups::analyze_univ(size_t qlev,const vector<bool>& svals,
                     size_t& bt_qlev,vec<Lit>& conflict_clause) {
   assert(level_type(qlev)==UNIVERSAL);
   if(qlev<2) return false;
   const auto& abstraction_conflict=abstractions[qlev].conflict;
   if(verb>3)std::cerr<<"abstraction_conflict:"<<abstraction_conflict<<std::endl;
-  bt_qlev=qlev-2;
+  bt_qlev=level_type(0)==UNIVERSAL ? 0 : 1;
   const auto sz=abstraction_conflict.size();
   ex_maxlev.assign(sz,-1);
   bool all_opponent=true;
@@ -376,21 +376,16 @@ maximal quantification level of the satisifying universal is used to update
 the backtracking level (because only such clauses can be enforced by the
 universal player).
 <<update max levels>>=
-Lit sat_lit;
+size_t esat_ql,usat_ql;
 const auto group=get_pinfo(qlev,var(conflict_lit)).group;
-const bool issat=find_sat_lit(group,sat_lit);
-if(issat){
-  const auto sat_lit_t=levs.type(sat_lit);
-  const auto sat_lit_l=levs.qlev(sat_lit);
-  if(sat_lit_t==EXISTENTIAL){
-    if((int)sat_lit_l>ex_maxlev[i])
-      ex_maxlev[i]=sat_lit_l;
-  } else {
-    all_opponent=false;
-    if(sat_lit_l>bt_qlev) bt_qlev=sat_lit_l;
-  }
+if(find_last_sat_elit(group,esat_ql)) {
+  const auto q=(int)esat_ql;
+  if(q>ex_maxlev[i]) ex_maxlev[i]=q;
 } else {
   all_opponent=false;
+  if(find_first_udesel(group,svals,usat_ql)) {
+    if(usat_ql>bt_qlev) bt_qlev=usat_ql;
+  }
 }
 
 @ \section{Additional Encoding}
@@ -618,13 +613,33 @@ size_t QestoGroups::find_parent(size_t qlev,size_t group) {
 }
 
 <<implementation>>=
-bool QestoGroups::find_sat_lit(size_t group,Lit& l){
+bool QestoGroups::find_first_udesel(size_t group,
+                                  const vector<bool>& svals,
+                                  size_t& ql) {
+  bool rv=false;
   while(1){
-    const auto ql=groups.qlev(group);
-    FOR_EACH(li,groups.lits(group)) {
-      l=*li;
-      if(eval(l,abstractions[ql].model)==l_True)
-        return true;
+    const auto _ql=groups.qlev(group);
+    if(level_type(_ql)==UNIVERSAL&&!svals[group]) {
+      ql=_ql;
+      rv=true;
+    }
+    const auto parent=groups.parent(group);
+    if(group==parent) return rv;
+    group=parent;
+  }
+  assert(0);
+  return rv;
+}
+
+<<implementation>>=
+bool QestoGroups::find_last_sat_elit(size_t group,size_t& ql){
+  while(1){
+    ql=groups.qlev(group);
+    if(level_type(ql)==EXISTENTIAL) {
+      FOR_EACH(li,groups.lits(group)) {
+        if(eval(*li,abstractions[ql].model)==l_True)
+          return true;
+      }
     }
     const auto parent=groups.parent(group);
     if(group==parent) return false;
@@ -771,8 +786,8 @@ using SATSPC::lit_Undef;
 
 <<private methods>>=
 void init();
-bool analyze(size_t qlev,size_t& bt_qlev,vec<Lit>& conflict_clause);
-bool analyze_univ(size_t qlev,size_t& bt_qlev,vec<Lit>& conflict_clause);
+bool analyze(size_t qlev,const vector<bool>& svals,size_t& bt_qlev,vec<Lit>& conflict_clause);
+bool analyze_univ(size_t qlev,const vector<bool>& svals,size_t& bt_qlev,vec<Lit>& conflict_clause);
 bool analyze_exists(size_t qlev,size_t& bt_qlev,vec<Lit>& conflict_clause);
 size_t find_parent(size_t qlev,size_t group);
 bool find_sat_lit(size_t group,Lit& l);
@@ -802,3 +817,7 @@ void init_svars();
 void init_game_rules_exists();
 bool init_game_rules_exists(size_t group);
 void init_game_rules_univ();
+bool find_first_udesel(size_t group,
+                                  const vector<bool>& svals,
+                                  size_t& ql);
+bool find_last_sat_elit(size_t group,size_t& ql);
