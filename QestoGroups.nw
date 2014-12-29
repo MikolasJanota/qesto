@@ -192,6 +192,10 @@ lbool QestoGroups::solve(size_t confl_budget) {
   while (!opt.get_luby_rest()||confl_budget--) {
     assert(qlev<=levs.lev_count());
     <<make decisions>>
+    if(opt.get_bump()&&qlev<levs.lev_count()){
+      auto& gs=groups.groups(qlev);
+      FOR_EACH(gi,gs) abstractions[qlev].bump(s(qlev,*gi));
+    }
     const bool sat=abstractions[qlev].solve(decisions);
     if(sat) {
       <<increase level>>
@@ -407,7 +411,6 @@ void QestoGroups::inst_e(size_t group) {
         qlev--;
         group=groups.parent(group))
     {
-      std::cerr<<"gr:"<<group<<"@"<<qlev<<std::endl;
       if(level_type(qlev)!=EXISTENTIAL) continue;
       if(!last){
         cl.push(~mkLit(s(qlev,group)));
@@ -455,9 +458,9 @@ void QestoGroups::encode_resdep(){
   const auto& gs=groups.groups(0);
   vector<Lit> branch_cond;
   LitBitSet current_literals;
-  vector<bool> empty_lev(levs.lev_count(),false);
+  vector<bool> skip_lev(levs.lev_count()+1,false);
   FOR_EACH (group_index, gs) {
-    encode_resdep(gin,branch_cond,current_literals,empty_lev,*group_index);
+    encode_resdep(gin,branch_cond,current_literals,skip_lev,*group_index);
   }
 }
 
@@ -467,14 +470,13 @@ void QestoGroups::encode_resdep(
   const GroupInversion& gin,
   const vector<Lit>& branch_cond,
   LitBitSet& current_literals,
-  vector<bool>& empty_lev,
+  vector<bool>& skip_lev,
   size_t group) {
   if(verb>5)std::cerr<<"encode_resdep:"<<group<<std::endl;
   if(groups.is_end(group)) return;
   const auto& literals = groups.lits(group);
   const auto qlev = groups.qlev(group);
   FOR_EACH(li,literals) current_literals.add(*li);
-  empty_lev[qlev]=literals.empty();
   if(group_type(group)==EXISTENTIAL) {
     <<resdep existential group>>
   }
@@ -502,8 +504,8 @@ for(size_t pivot_index=0; pivot_index<literals.size(); ++pivot_index){
                       resolvables);
   vec<Lit> aux;
   for(size_t ul=0;ul<qlev;++ul){
-    //if(level_type(ul)!=UNIVERSAL||empty_lev[ul])
-    if(level_type(ul)!=UNIVERSAL) continue;
+    if(level_type(ul)!=UNIVERSAL||skip_lev[ul]) continue;
+    //if(level_type(ul)!=UNIVERSAL) continue;
     assert(branch_cond.size()>ul);
     aux.clear();
     aux.push(~(branch_cond[ul]));
@@ -535,27 +537,34 @@ if(children.size()){
   }
   vector<Lit> branch_cond_new(qlev+1);
   const auto csz=children.size();
+  if(csz==1
+    &&(qlev+2)<levs.lev_count()
+    &&level_type(qlev)==UNIVERSAL
+    &&groups.lits(children[0]).empty()) 
+    skip_lev[qlev+2]=true;
   for(size_t child_index=0;child_index<csz;++child_index){
     if(verb>5)std::cerr<<"child gr:"<<children[child_index]<<std::endl;
+
     for(size_t ul=0;ul<=qlev;++ul){
-      //if(level_type(ul)!=UNIVERSAL||empty_lev[ul]) continue;
-      if(level_type(ul)!=UNIVERSAL) continue;
+      if(level_type(ul)!=UNIVERSAL||skip_lev[ul]) continue;
+      //if(level_type(ul)!=UNIVERSAL) continue;
       const auto br=ul<qlev&&csz==1 ? branch_cond[ul]
                                     : mkLit(abstractions[ul].newVar());
       if(verb>5)std::cerr<<"brlit@"<<ul<<":"<<br<<std::endl;
       branching[ul]->push(br);
       branch_cond_new[ul]=br;
     }
-    encode_resdep(gin,branch_cond_new,current_literals,empty_lev,children[child_index]);
+    encode_resdep(gin,branch_cond_new,current_literals,skip_lev,children[child_index]);
   }
   for(size_t ul=0;ul<=qlev;++ul){
-    //if(level_type(ul)!=UNIVERSAL||empty_lev[ul]) continue;
-    if(level_type(ul)!=UNIVERSAL) continue;
+    if(level_type(ul)!=UNIVERSAL||skip_lev[ul]) continue;
+    //if(level_type(ul)!=UNIVERSAL) continue;
     if(verb>5)std::cerr<<"abrc@"<<ul<<":"<<*(branching[ul])<<std::endl;
     abstractions[ul].addClause_(*(branching[ul]));
     ++rescount;
     delete branching[ul];
   }
+  if((qlev+2)<levs.lev_count()) skip_lev[qlev+2]=false;
 }
 
 <<implementation>>=
@@ -785,7 +794,7 @@ void encode_resdep(
     const GroupInversion& gin,
     const vector<Lit>& branch_cond,
     LitBitSet& current_literals,
-    vector<bool>& empty_lev,
+    vector<bool>& skip_lev,
     size_t group);
 bool smax(size_t qlev,size_t group,vector<bool>& svals);
 void init_game_rules();
