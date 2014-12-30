@@ -707,8 +707,10 @@ void QestoGroups::allocate_selectors() {
   assert(levs.lev_count());
   for(size_t qlev=0;true;++qlev){
     assert(qlev<=levs.lev_count());
-    if(opt.get_dir1_enc()) abstractions[qlev].phase_saving=0;
-    abstractions[qlev].new_variables(orig_maxv);
+    const bool ve=opt.get_varelim()&&level_type(qlev)==UNIVERSAL;
+    if(opt.get_dir1_enc() || ve)
+      abstractions[qlev].phase_saving=0;
+    if(!ve) abstractions[qlev].new_variables(orig_maxv);
     if(qlev) {//parent selectors
       const auto& pgs=groups.groups(qlev-1);
       FOR_EACH(gi,pgs) {
@@ -717,7 +719,7 @@ void QestoGroups::allocate_selectors() {
         if (pvars.size()<=group) pvars.resize(group+1,-1);
         pvars[group]=pv;
         if(verb>5)std::cerr<<"m: "<<group<<"@"<<qlev<<":"<<pv<<std::endl;
-        const size_t inx=pv-orig_maxv-1;
+        const size_t inx=ve ? pv : pv-orig_maxv-1;
         auto& ql_infos=infos[qlev];
         if (ql_infos.size()<=inx) ql_infos.resize(inx+1);
         ql_infos[inx].qlev=qlev-1;
@@ -774,8 +776,9 @@ inline Var QestoGroups::s(size_t qlev,size_t group) const{
 
 <<inline implementation>>=
 inline QestoGroups::PInfo QestoGroups::get_pinfo(size_t qlev,Var pv) const {
-  assert(pv>levs.maxv());
-  const size_t inx=pv-levs.maxv()-1;
+  const bool ve=opt.get_varelim()&&level_type(qlev)==UNIVERSAL;
+  assert(ve || pv>levs.maxv());
+  const size_t inx=ve ? pv : pv-levs.maxv()-1;
   auto& ql_infos=infos[qlev];
   assert(inx<ql_infos.size());
   return ql_infos[inx];
@@ -786,7 +789,7 @@ inline QuantifierType group_type(size_t gid) {
   return level_type(groups.qlev(gid)); }
 
 <<private methods>>=
-inline QuantifierType level_type(size_t qlev) {
+inline QuantifierType level_type(size_t qlev) const {
   assert(qlev<=levs.lev_count());
   return qlev<levs.lev_count() ? levs.level_type(qlev) : UNIVERSAL;
 }
