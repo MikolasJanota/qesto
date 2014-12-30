@@ -81,13 +81,16 @@ inline Var p(size_t quant_level,size_t group_index) const;
 the~$s$ variables.
 <<implementation>>=
 void QestoGroups::init(){
+  GroupInversion* gin= (opt.get_varelim()||opt.get_resdep()) ?
+                           new GroupInversion(groups)
+                         : NULL;
   allocate_selectors();
   init_game_rules();
-  init_svars();
+  init_svars(gin);
   if(opt.get_ex_inst()){inst_e();}
   if(opt.get_resdep()) {// encode resolution dependencies
      std::cerr<<"c resdep init start:"<<read_cpu_time()<<std::endl;
-     encode_resdep();
+     encode_resdep(*gin);
      std::cerr<<"c resdep init end:"<<read_cpu_time()<<std::endl;
      std::cerr<<"c rescount:"<<rescount<<std::endl;
   }
@@ -99,10 +102,15 @@ abstractions that $s_k^G$ is true iff $s_{k-1}^G$ is true and all the literals
 at level $k$ in the group $G$ are falsified.
 
 <<implementation>>=
-void QestoGroups::init_svars() {
+void QestoGroups::init_svars(const GroupInversion* gin) {
   vector<Lit> saux;
   for(size_t qlev=0;qlev<levs.lev_count();++qlev){
-    vector<size_t> gs=groups.groups(qlev);
+    if(opt.get_varelim()&&level_type(qlev)==UNIVERSAL) {
+      assert(gin);
+      encode_variable_elimination(qlev,*gin);
+      continue;
+    }
+    const auto& gs=groups.groups(qlev);
     FOR_EACH(gi,gs) {
       const size_t g=*gi;
       saux.clear();
@@ -121,6 +129,43 @@ void QestoGroups::init_svars() {
         encode_and(abstractions[qlev],sel_lit,saux);
       }
     }
+  }
+}
+
+@ For any pair of clauses $g_1$ and $g_2$ such that $x\in g_1$ and $\bar x\in
+  g_2$, introduce the constraint $\bar s_1\lor\bar s_2$ where $s_i$ is a
+  selection variable for $g_i$.
+<<implementation>>=
+void QestoGroups::encode_variable_elimination(
+    size_t qlev, const GroupInversion& gin) {
+  std::unordered_set<std::pair<size_t, size_t> > conflicts;
+  const auto& vars=levs.level_vars(qlev);
+  FOR_EACH(vi,vars) {
+    const Var v=*vi;
+    const auto& gs1=gin[mkLit(v)];
+    const auto& gs2=gin[~mkLit(v)];
+    FOR_EACH(cii1,gs1) {
+      FOR_EACH(cii2,gs2) {
+        const auto group1=min(*cii1,*cii2);
+        const auto group2=max(*cii1,*cii2);
+        conflicts.insert(make_pair(group1,group2));
+      }
+    }
+  }
+  std::cerr<<"c conflicts: "<<conflicts.size()<<std::endl;
+  if(qlev){
+    vector<size_t> gs=groups.groups(qlev);
+    FOR_EACH(i,gs) {
+      const auto g=*i;
+      const auto par=groups.parent(g);
+      assert(g!=par);
+      abstractions[qlev].addClause(~mkLit(s(qlev,g)),
+                                    mkLit(p(qlev,par)));
+    }
+  }
+  FOR_EACH(i,conflicts) {
+    abstractions[qlev].addClause(~mkLit(s(qlev,i->first)),
+                                 ~mkLit(s(qlev,i->second)));
   }
 }
 
@@ -443,13 +488,12 @@ another group from the same level must be selected so that
 at least one clause in that group is resolvable. And by resolvable we mean
 that there exists another clause with a complementary literal.
 <<implementation>>=
-void QestoGroups::encode_resdep(){
+void QestoGroups::encode_resdep(const GroupInversion& gin){
 #if DEBUG
   for(size_t ul=0;ul<=levs.lev_count();++ul){
     abstractions[ul].new_variables((ul+1)*100-1);
   }
 #endif
-  const GroupInversion gin(groups);
   const auto& gs=groups.groups(0);
   vector<Lit> branch_cond;
   LitBitSet current_literals;
@@ -794,7 +838,7 @@ bool find_sat_lit(size_t group,Lit& l);
 void allocate_selectors();
 void inst_e();
 void inst_e(size_t group);
-void encode_resdep();
+void encode_resdep(const GroupInversion& gin);
 void inst_e(const Groups::Node* n,
     vector<const Groups::Node*>& accum,
     vector<Groups::Edge>& eaccum);
@@ -813,7 +857,7 @@ void encode_resdep(
     size_t group);
 bool smax(size_t qlev,size_t group,vector<bool>& svals);
 void init_game_rules();
-void init_svars();
+void init_svars(const GroupInversion* gin);
 void init_game_rules_exists();
 bool init_game_rules_exists(size_t group);
 void init_game_rules_univ();
@@ -821,3 +865,5 @@ bool find_first_udesel(size_t group,
                                   const vector<bool>& svals,
                                   size_t& ql);
 bool find_last_sat_elit(size_t group,size_t& ql);
+void encode_variable_elimination(
+    size_t qlev, const GroupInversion& gin);
