@@ -121,6 +121,7 @@ def main():
   options.add_short_non_arg_option('smax','-m','in -1 mode, try rectify the setting of selection variables')
   options.add_short_non_arg_option('bump','-b','sel vars bumping')
   options.add_short_non_arg_option('varelim','-a','variable elimination')
+  options.add_short_non_arg_option('lazy','-y','lazy var encoding')
 ###
   generate(options, sys.stdout, sys.stderr)
 

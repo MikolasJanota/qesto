@@ -138,7 +138,7 @@ bool Solver::addClause_(vec<Lit>& ps)
 //    fprintf(stderr,"%d",var(ps[i]));
 //  }
 //  fprintf(stderr," 0\n");
-//
+
     assert(decisionLevel() == 0);
     if (!ok) return false;
 

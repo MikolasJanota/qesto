@@ -73,7 +73,8 @@ SATSPC::MiniSatExt* abstractions;
 <<fields init>>=
 , abstractions(new SATSPC::MiniSatExt[levs.lev_count()+1])
 
-@  TODO
+@  For a level~$k$, the variable~$p(k,g)$ is the variable of the parent
+group~$g$, hence~$g$  must be at level~$k-1$.
 <<private methods>>=
 inline Var p(size_t quant_level,size_t group_index) const;
 
@@ -103,32 +104,44 @@ at level $k$ in the group $G$ are falsified.
 
 <<implementation>>=
 void QestoGroups::init_svars(const GroupInversion* gin) {
+  assert(!opt.get_lazy() || !opt.get_varelim());
   vector<Lit> saux;
   for(size_t qlev=0;qlev<levs.lev_count();++qlev){
+    if(opt.get_lazy()&&level_type(qlev)==EXISTENTIAL)  continue;
     if(opt.get_varelim()&&level_type(qlev)==UNIVERSAL) {
       assert(gin);
       encode_variable_elimination(qlev,*gin);
       continue;
     }
     const auto& gs=groups.groups(qlev);
-    FOR_EACH(gi,gs) {
-      const size_t g=*gi;
-      saux.clear();
-      if(qlev) saux.push_back(mkLit(p(qlev,groups.parent(g))));
-      const auto& ls=groups.lits(g);
-      FOR_EACH(li,ls) saux.push_back(~(*li));
-      const auto sel_lit=mkLit(s(qlev,g));
-      if(opt.get_dir1_enc()) {
-        if(level_type(qlev)==EXISTENTIAL) {
-          //encode_and(abstractions[qlev],sel_lit,saux);
-          encode_and_neg(abstractions[qlev],sel_lit,saux);
-        } else {
-          encode_and_pos(abstractions[qlev],sel_lit,saux);
-        }
-      } else {
-        encode_and(abstractions[qlev],sel_lit,saux);
-      }
+    FOR_EACH(gi,gs) encode_group(qlev,*gi,saux);
+  }
+}
+
+<<private members>>=
+vector<bool> is_encoded;
+<<fields init>>=
+,is_encoded(groups.get_group_count(),false)
+
+<<implementation>>=
+void QestoGroups::encode_group(size_t qlev,size_t g,vector<Lit>& saux){
+  if(is_encoded[g]) return;
+  is_encoded[g]=true;
+  if(verb>5)std::cerr<<"encode_group "<<g<<"@"<<qlev<<std::endl;
+  saux.clear();
+  if(qlev) saux.push_back(mkLit(p(qlev,groups.parent(g))));
+  const auto& ls=groups.lits(g);
+  FOR_EACH(li,ls) saux.push_back(~(*li));
+  const auto sel_lit=mkLit(s(qlev,g));
+  if(opt.get_dir1_enc()) {
+    if(level_type(qlev)==EXISTENTIAL) {
+      //encode_and(abstractions[qlev],sel_lit,saux);
+      encode_and_neg(abstractions[qlev],sel_lit,saux);
+    } else {
+      encode_and_pos(abstractions[qlev],sel_lit,saux);
     }
+  } else {
+    encode_and(abstractions[qlev],sel_lit,saux);
   }
 }
 
@@ -211,8 +224,11 @@ bool QestoGroups::init_game_rules_exists(size_t group){
     all_universal&=init_game_rules_exists(*gi);
   const auto qlev=groups.qlev(group);
   const auto qt=level_type(qlev);
-  if(all_universal&&qt==EXISTENTIAL)
+  vector<Lit> saux;
+  if(all_universal&&qt==EXISTENTIAL) {
     abstractions[qlev].addClause(~mkLit(s(qlev,group)));
+    encode_group(qlev,group,saux);
+  }
   all_universal&=(qt==UNIVERSAL)||groups.lits(group).empty();
   return all_universal;
 }
@@ -231,10 +247,21 @@ conflict analysis).
 <<implementation>>=
 lbool QestoGroups::solve(size_t confl_budget) {
   size_t qlev=0;
+  vector<size_t> conflict_groups;
   vec<Lit> conflict_clause;
   vec<Lit> decisions;
   vector<bool> svals(groups.get_group_count(),true);
+  vector<Lit> saux;
   while (!opt.get_luby_rest()||confl_budget--) {
+    if(opt.get_lazy()&&level_type(qlev)==EXISTENTIAL) {
+      const auto& gs=groups.groups(qlev);
+      FOR_EACH(gi,gs) {
+        const auto g=*gi;
+        const bool psel=!qlev||svals[groups.parent(g)];
+        if(psel) encode_group(qlev,g,saux);
+      }
+    }
+    if(verb>5)std::cerr<<"svals "<<svals<<std::endl;
     assert(qlev<=levs.lev_count());
     <<make decisions>>
     if(opt.get_bump()&&qlev<levs.lev_count()){
@@ -278,15 +305,22 @@ FOR_EACH(gi,groups.groups(qlev)) {
 @ Analyze conflict and if it is resolvable, backtrack.
 <<conflict analysis>>=
 ++tot_bt_count;
-conflict_clause.clear();
+conflict_groups.clear();
 size_t bt_qlev=-1;
-const bool resolved=analyze(qlev,svals,/*out*/bt_qlev,/*out*/conflict_clause);
+const bool resolved=analyze(qlev,svals,/*out*/bt_qlev,/*out*/conflict_groups);
 if(!resolved) { //formula true iff universal lost
   return level_type(qlev)==UNIVERSAL?l_True:l_False;
 } else {
   assert(qlev>bt_qlev);
-  if(verb>3)std::cerr<<"cc:"<<conflict_clause<<std::endl;
-  if(verb>2)std::cerr<<"cc sz:"<<conflict_clause.size()<<std::endl;
+  conflict_clause.clear();
+  FOR_EACH(gi,conflict_groups) {
+    const auto g=*gi;
+    const QuantifierType gt=group_type(g);
+    encode_group(bt_qlev,g,saux);
+    conflict_clause.push(mkLit(s(bt_qlev,g),gt==EXISTENTIAL));
+  }
+  if(verb>3)std::cerr<<"cc:"<<conflict_groups<<std::endl;
+  if(verb>2)std::cerr<<"cc sz:"<<conflict_groups.size()<<std::endl;
   abstractions[bt_qlev].addClause_(conflict_clause);
   qlev=bt_qlev;
 }
@@ -321,11 +355,11 @@ inline PInfo get_pinfo(size_t qlev,Var p) const;
 into two respective procedures.
 <<implementation>>=
 bool QestoGroups::analyze(size_t qlev,const vector<bool>& svals,
-                    size_t& bt_qlev,vec<Lit>& conflict_clause) {
+                    size_t& bt_qlev, vector<size_t>& conflict_groups) {
   QuantifierType loser=level_type(qlev);
   if(verb>2)std::cerr<<"("<<tot_bt_count<<") analyse loser:"<<loser<<"@"<<qlev<<std::endl;
-  return loser==EXISTENTIAL ? analyze_exists(qlev,bt_qlev,conflict_clause)
-                            : analyze_univ(qlev,svals,bt_qlev,conflict_clause);
+  return loser==EXISTENTIAL ? analyze_exists(qlev,bt_qlev,conflict_groups)
+                            : analyze_univ(qlev,svals,bt_qlev,conflict_groups);
 }
 
 @ We start with a unsatisfiable core from the abstraction at the conflict
@@ -334,7 +368,7 @@ appear in the core are already deselected when we get to [[qlev]] next
 time.  At this point we're just backtracking by 2 levels.
 <<implementation>>=
 bool QestoGroups::analyze_exists(size_t qlev,
-                          size_t& bt_qlev,vec<Lit>& conflict_clause) {
+                          size_t& bt_qlev, vector<size_t>& conflict_groups) {
   assert(level_type(qlev)==EXISTENTIAL);
   if(qlev<2) return false;
   const auto& abstraction_conflict=abstractions[qlev].conflict;
@@ -367,7 +401,7 @@ bool QestoGroups::analyze_exists(size_t qlev,
     const Lit l=abstraction_conflict[i];
     if(!sign(l)) continue;
     const auto vi=get_pinfo(qlev,var(l));
-    conflict_clause.push(~mkLit(s(bt_qlev,find_parent(bt_qlev,vi.group))));
+    conflict_groups.push_back(find_parent(bt_qlev,vi.group));
   }
   return true;
 }
@@ -385,7 +419,7 @@ always replicate these moves.
 vector<int> ex_maxlev;// maximum lev of satisfying ex lit
 <<implementation>>=
 bool QestoGroups::analyze_univ(size_t qlev,const vector<bool>& svals,
-                    size_t& bt_qlev,vec<Lit>& conflict_clause) {
+                    size_t& bt_qlev, vector<size_t>& conflict_groups) {
   assert(level_type(qlev)==UNIVERSAL);
   if(qlev<2) return false;
   const auto& abstraction_conflict=abstractions[qlev].conflict;
@@ -406,7 +440,7 @@ bool QestoGroups::analyze_univ(size_t qlev,const vector<bool>& svals,
     if(sign(l)) continue;
     const auto vi=get_pinfo(qlev,var(l));
     if(ex_maxlev[i]<=(int)bt_qlev)
-      conflict_clause.push(mkLit(s(bt_qlev,find_parent(bt_qlev,vi.group))));
+      conflict_groups.push_back(find_parent(bt_qlev,vi.group));
   }
   return true;
 }
@@ -579,7 +613,7 @@ if(children.size()){
   if(csz==1
     &&(qlev+2)<levs.lev_count()
     &&level_type(qlev)==UNIVERSAL
-    &&groups.lits(children[0]).empty()) 
+    &&groups.lits(children[0]).empty())
     skip_lev[qlev+2]=true;
   for(size_t child_index=0;child_index<csz;++child_index){
     if(verb>5)std::cerr<<"child gr:"<<children[child_index]<<std::endl;
@@ -833,9 +867,11 @@ using SATSPC::lit_Undef;
 
 <<private methods>>=
 void init();
-bool analyze(size_t qlev,const vector<bool>& svals,size_t& bt_qlev,vec<Lit>& conflict_clause);
-bool analyze_univ(size_t qlev,const vector<bool>& svals,size_t& bt_qlev,vec<Lit>& conflict_clause);
-bool analyze_exists(size_t qlev,size_t& bt_qlev,vec<Lit>& conflict_clause);
+bool analyze(size_t qlev,const vector<bool>& svals,size_t& bt_qlev,
+vector<size_t>& conflict_groups);
+bool analyze_univ(size_t qlev,const vector<bool>& svals,size_t& bt_qlev,
+vector<size_t>& conflict_groups);
+bool analyze_exists(size_t qlev,size_t& bt_qlev,vector<size_t>& conflict_groups);
 size_t find_parent(size_t qlev,size_t group);
 bool find_sat_lit(size_t group,Lit& l);
 void allocate_selectors();
@@ -870,3 +906,4 @@ bool find_first_udesel(size_t group,
 bool find_last_sat_elit(size_t group,size_t& ql);
 void encode_variable_elimination(
     size_t qlev, const GroupInversion& gin);
+void encode_group(size_t qlev,size_t g,vector<Lit>& saux);

@@ -63,9 +63,25 @@ bool contains(const std::unordered_set<K>& es, const K& e) {
   return es.find(e) != es.end();
 }
 
-inline std::ostream& make_indent(std::ostream& output_stream, size_t indent) {
-  while (indent) { output_stream<<" "; --indent; }
-  return output_stream;
+inline std::ostream& operator <<(std::ostream& outs, const std::vector<bool>& ns){
+  outs<<'<';
+  bool f=true;
+  for(size_t i=0;i<ns.size();++i) {
+    if(!ns[i]) continue;
+    if(!f) outs<<' ';
+    f=false;
+    outs<<i;
+  }
+  return outs<<'>';
+}
+
+inline std::ostream& operator <<(std::ostream& outs, const std::vector<size_t>& ns){
+  outs<<'<';
+  for(size_t i=0;i<ns.size();++i) {
+    if(i) outs<<' ';
+    outs<<ns[i];
+  }
+  return outs<<'>';
 }
 
 double luby(double y, int x);
