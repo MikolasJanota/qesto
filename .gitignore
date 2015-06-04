@@ -40,3 +40,6 @@ GroupInversion.fls
 GroupInversion.log
 GroupInversion.out
 GroupInversion.pdf
+*.gcda
+*.gcno
+*.gcov
