@@ -69,6 +69,10 @@ LIBD+=-L./minisat/simp
 CFLAGS+=-I./minisat/
 endif
 
+ifdef EXPERT # allow using giving options, without options the solver's fairly dumb
+CFLAGS+=-DEXPERT
+endif
+
 ifdef STATIC
 CFLAGS+=-static
 LNFLAGS+=-static

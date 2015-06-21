@@ -24,6 +24,28 @@ int main(int argc, char** argv) {
 #ifndef NDEBUG
   cout << "c DEBUG version." << endl;
 #endif
+  cerr<<"c qesto, v1.0"<<std::endl;
+  cerr<<"c (C) 2015 Mikolas Janota, mikolas.janota@gmail.com"<<std::endl;
+#ifndef EXPERT
+  // prepare nonexpert options
+  // rareqs -uupb -h3 FILENAME
+  char* nargv[4];
+  char o1[3];
+  char o2[3];
+  char hs[2];
+  strcpy(o1, "-g");
+  strcpy(o2, "-e");
+  strcpy(hs, "-");
+  nargv[0]=argv[0];
+  nargv[1]=o1;
+  nargv[2]=o2;
+  nargv[3]=argc>=2 ? argv[1] : hs;
+  if (argc>2) { cerr<<"c WARNING: ingoring some options after FILENAME"<<std::endl;}
+  argv=nargv;
+  argc=4;
+#else
+  cerr<<"c WARNING: running in the EXPERT mode, I'm very stupid without any options."<<std::endl;
+#endif
   Options options;
   if (!options.parse(argc, argv)) {
     cerr << "ERROR: processing options." << endl;
