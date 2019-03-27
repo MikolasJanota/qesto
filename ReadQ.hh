@@ -14,7 +14,7 @@
 #include "DataStructures.hh"
 #include "Reader.hh"
 #include "ReadException.hh"
-#include "core/SolverTypes.h"
+#include "minisat/core/SolverTypes.h"
 using SATSPC::Lit;
 using SATSPC::Var;
 

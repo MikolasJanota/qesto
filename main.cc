@@ -14,6 +14,7 @@ static void SIG_handler(int signum);
 ostream& print_usage(const Options& options,ostream& o);
 Qesto* ps=NULL;
 QestoGroups* gps=NULL;
+char *_strdup(const char *s);
 
 int main(int argc, char** argv) {
   signal(SIGHUP, SIG_handler);
@@ -28,18 +29,13 @@ int main(int argc, char** argv) {
   cerr<<"c (C) 2015 Mikolas Janota, mikolas.janota@gmail.com"<<std::endl;
 #ifndef EXPERT
   // prepare nonexpert options
-  // rareqs -uupb -h3 FILENAME
-  char* nargv[4];
-  char o1[3];
-  char o2[3];
-  char hs[2];
-  strcpy(o1, "-g");
-  strcpy(o2, "-e");
-  strcpy(hs, "-");
-  nargv[0]=argv[0];
-  nargv[1]=o1;
-  nargv[2]=o2;
-  nargv[3]=argc>=2 ? argv[1] : hs;
+  int nargc = 0;
+  char* nargv[20];
+  nargv[nargc++] = _strdup(argv[0]);
+  nargv[nargc++] = _strdup("-g");
+  nargv[nargc++] = _strdup("-e");
+  nargv[nargc++] = _strdup("-y");
+  nargv[nargc++] = argc>=2 ? _strdup(argv[1]) : _strdup("-");
   if (argc>2) { cerr<<"c WARNING: ingoring some options after FILENAME"<<std::endl;}
   argv=nargv;
   argc=4;
@@ -52,7 +48,8 @@ int main(int argc, char** argv) {
     print_usage(options,cerr);
     return 100;
   }
-  auto& rest = options.get_rest();
+  while (nargc--) delete[] nargv[nargc];
+  const auto& rest = options.get_rest();
   if (rest.size()>1)
     cerr<<"WARNING: garbage at the end of command line."<<endl;
 
@@ -117,4 +114,11 @@ static void SIG_handler(int signum) {
 ostream& print_usage(const Options& options,ostream& o) {
   o << "USAGE: [OPTIONS] [FILENAME]" << endl;
   return options.print(o);
+}
+
+char *_strdup(const char *s) {
+    size_t sz = strlen(s) + 1;
+    char *p = new char[sz];
+    while (sz--) p[sz] = s[sz];
+    return p;
 }

@@ -87,7 +87,6 @@ inline void LitBitSet::clear()  { set.clear(); _size = 0; }
 inline const_infinite_LitBitSetIterator& const_infinite_LitBitSetIterator::operator++() {
   if (!ls.size()) return *this;
   assert(i < ls.physical_size());
-  assert(0 <= i);
   do { i=(i+1) % ls.physical_size(); }
   while (i<2 || !ls.get(index2literal(i)));
   assert (ls.get(index2literal(i)));

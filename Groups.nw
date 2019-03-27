@@ -32,7 +32,7 @@ inline const vector<size_t>& get_children(size_t group);
 
 <<Groups.cc>>=
 #include "Groups.hh"
-#include "mtl/Sort.h"
+#include "minisat/mtl/Sort.h"
 using SATSPC::lit_Error;
 using SATSPC::lit_Undef;
 <<implementation>>

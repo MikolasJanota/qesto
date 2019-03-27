@@ -17,18 +17,15 @@
 #define __PL (std::cerr << __FILE__ << ":" << __LINE__ << std::endl).flush();
 #define FOR_EACH(index,iterated)\
   for (auto index = (iterated).begin(); index != (iterated).end();++index)
-#ifdef USE_GL
-#define SATSPC Glucose
-#else
 #define SATSPC Minisat
-#endif
+#define ASSERT(C) do { assert(C); } while(0)
+#define VERIFY(C) do { if (!(C)) ASSERT(0); } while(0)
 
 static inline double read_cpu_time() {
   struct rusage ru; getrusage(RUSAGE_SELF, &ru);
   return (double)ru.ru_utime.tv_sec + (double)ru.ru_utime.tv_usec / 1000000;
 }
 
-//struct sizePairHash {
 namespace std {
   template<>
     struct hash<std::pair<size_t, size_t> > {
@@ -37,21 +34,6 @@ namespace std {
       }
     };
 }
-
-struct cstrHash {
-  inline size_t operator() (const char* s) const {
-    size_t hash = 5381;
-    char c;
-    while (c = *s++)
-      hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
-    return hash;
-  }
-};
-
-struct cstrEq {
-  inline size_t operator() (const char* s1,const char* s2) const {
-    return strcmp(s1,s2)==0; };
-};
 
 template <class K,class V>
 bool contains(const std::unordered_map<K,V>& es, const K& e) {

@@ -7,11 +7,7 @@
 #ifndef MINISATEXT_HH
 #define	MINISATEXT_HH
 #include "auxiliary.hh"
-#if USE_SIMP
-#include "simp/SimpSolver.h"
-#else
-#include "core/Solver.h"
-#endif
+#include "minisat/core/Solver.h"
 
 namespace SATSPC {
   class MiniSatExt : public Solver {

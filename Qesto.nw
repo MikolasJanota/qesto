@@ -225,7 +225,7 @@ level [[qlev]]. We need to make sure that at least one of the clauses that
 appear in the core are already deselected when we get to [[qlev]] next
 time.  At this point we're just backtracking by 2 levels.
 <<implementation>>=
-bool Qesto::analyze_exists(size_t qlev,const vec<Lit>& trail,
+bool Qesto::analyze_exists(size_t qlev,const vec<Lit>& ,
                           size_t& bt_qlev,vec<Lit>& conflict_clause) {
   assert(level_type(qlev)==EXISTENTIAL);
   if(qlev<2) return false;
@@ -253,7 +253,7 @@ always replicate these moves.
 <<private members>>=
 vector<int> ex_maxlev;// maximum lev of satisfying ex lit
 <<implementation>>=
-bool Qesto::analyze_univ(size_t qlev,const vec<Lit>& trail,
+bool Qesto::analyze_univ(size_t qlev,const vec<Lit>& ,
                     size_t& bt_qlev,vec<Lit>& conflict_clause) {
   assert(level_type(qlev)==UNIVERSAL);
   if(qlev<2) return false;
@@ -419,7 +419,7 @@ void Qesto::init_abstractions() {
     if(opt.get_dir1_enc()) abstractions[qlev].phase_saving=0;
     abstractions[qlev].new_variables(maxv);
     for(size_t clause_index=0;clause_index<fla.cnf.size();++clause_index){
-      const Var v=abstractions[qlev].newVar(level_type(qlev)==EXISTENTIAL);
+      const Var v=abstractions[qlev].newVar(level_type(qlev)==EXISTENTIAL ? l_True : l_False);
       maxv=v;
       const size_t index=qlev*(fla.cnf.size())+clause_index;
       svars[index]=v;
@@ -464,6 +464,9 @@ using std::make_pair;
 using SATSPC::vec;
 using SATSPC::Lit;
 using SATSPC::lit_Undef;
+using SATSPC::l_Undef;
+using SATSPC::l_True;
+using SATSPC::l_False;
 
 <<h includes>>=
 #include "Options.hh"

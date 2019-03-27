@@ -1,20 +1,7 @@
-/*****************************************************************************/
-/*    This file is part of RAReQS.                                           */
-/*                                                                           */
-/*    rareqs is free software: you can redistribute it and/or modify         */
-/*    it under the terms of the GNU General Public License as published by   */
-/*    the Free Software Foundation, either version 3 of the License, or      */
-/*    (at your option) any later version.                                    */
-/*                                                                           */
-/*    rareqs is distributed in the hope that it will be useful,              */
-/*    but WITHOUT ANY WARRANTY; without even the implied warranty of         */
-/*    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          */
-/*    GNU General Public License for more details.                           */
-/*                                                                           */
-/*    You should have received a copy of the GNU General Public License      */
-/*    along with rareqs.  If not, see <http://www.gnu.org/licenses/>.        */
-/*****************************************************************************/
 #include "minisat_auxiliary.hh"
+using SATSPC::l_True;
+using SATSPC::l_False;
+using SATSPC::l_Undef;
 
 char get_sign(lbool l) {
     if (l==l_True) return '+';
@@ -33,7 +20,7 @@ ostream& print(ostream& out, const vec<Lit>& lv) {for (int i=0;i<lv.size();++i) 
 
 ostream& print(ostream& out, const vector<Lit>& lv) {for (size_t i=0;i<lv.size();++i) out << lv[i] << " "; return out;}
 
-ostream& operator << (ostream& outs, LiteralVector ls){
+ostream& operator << (ostream& outs, const LiteralVector& ls){
   for (size_t i=0;i<ls.size();++i) {
     if (i) outs<<' ';
     outs<<ls[i];

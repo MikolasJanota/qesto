@@ -643,7 +643,7 @@ if(children.size()){
 <<implementation>>=
 void QestoGroups::compute_resolvables(const GroupInversion& gin,
                                       const LitBitSet& current_literals,
-                                      size_t qlev,
+                                      size_t,
                                       Lit pivot,
                                       /*out*/vector<size_t>& resolvables){
   if(verb>5)std::cerr<<"compute_resolvables: "<<pivot<<std::endl;
@@ -682,7 +682,7 @@ void QestoGroups::compute_resolvables(const GroupInversion& gin,
 
 <<implementation>>=
 size_t QestoGroups::find_parent(size_t qlev,size_t group) {
-   assert(groups.qlev(group)>=qlev);
+   VERIFY(groups.qlev(group)>=qlev);
    while(1){
      const auto gql=groups.qlev(group);
      if(gql==qlev) return group;
@@ -764,7 +764,7 @@ void QestoGroups::allocate_selectors() {
     const auto& gs=groups.groups(qlev);
     FOR_EACH(gi,gs) {
       const auto group=*gi;
-      const Var v=abstractions[qlev].newVar(level_type(qlev)==EXISTENTIAL);
+      const Var v=abstractions[qlev].newVar(level_type(qlev)==EXISTENTIAL ? l_True : l_False);
       if (svars.size()<=group) svars.resize(group+1,-1);
       svars[group]=v;
       if(verb>5)std::cerr<<"m: "<<group<<"@"<<qlev<<":"<<v<<std::endl;
@@ -793,7 +793,7 @@ bool QestoGroups::smax(size_t qlev,size_t group,
 
 <<inline implementation>>=
 inline Var QestoGroups::p(size_t qlev,size_t group) const{
-  assert(qlev);
+  VERIFY(qlev);
   assert(qlev<=levs.lev_count());
   assert(groups.qlev(group)==qlev-1);
   assert(group<pvars.size());
@@ -802,7 +802,7 @@ inline Var QestoGroups::p(size_t qlev,size_t group) const{
 
 <<inline implementation>>=
 inline Var QestoGroups::s(size_t qlev,size_t group) const{
-  assert(qlev<levs.lev_count());
+  VERIFY(qlev<levs.lev_count());
   assert(groups.qlev(group)==qlev);
   assert(group<svars.size());
   return svars[group];
@@ -854,6 +854,9 @@ using std::make_pair;
 using SATSPC::vec;
 using SATSPC::Lit;
 using SATSPC::lit_Undef;
+using SATSPC::l_Undef;
+using SATSPC::l_False;
+using SATSPC::l_True;
 
 <<h includes>>=
 #include "Options.hh"

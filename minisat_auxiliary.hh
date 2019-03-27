@@ -28,30 +28,29 @@ ostream& print(ostream& out, const vector<Lit>& lv);
 ostream& print(ostream& out, Lit l);
 ostream& operator << (ostream& outs, Lit lit);
 ostream& operator << (ostream& outs, lbool lb);
-ostream& operator << (ostream& outs, LiteralVector ls);
+ostream& operator << (ostream& outs, const LiteralVector& ls);
 
-inline ostream& operator << (ostream& outs, const vec<Lit>& lv) {
-  return print(outs, lv);
-}
+inline ostream& operator << (ostream& out, const vec<Lit>& lv) { return print(out,lv); }
+inline ostream& operator << (ostream& out, const Minisat::LSet& lv) { return print(out,lv.toVec()); }
 
-inline Lit to_lit(Var v, lbool val) {return val==l_True ? mkLit(v) : ~mkLit(v);}
+inline Lit to_lit(Var v, lbool val) {return val==SATSPC::l_True ? mkLit(v) : ~mkLit(v);}
 
 inline Lit to_lit(const vec<lbool>& bv, Var v) {
-  return (v<bv.size()) && (bv[v]==l_True) ? mkLit(v) : ~mkLit(v);
+  return (v<bv.size()) && (bv[v]==SATSPC::l_True) ? mkLit(v) : ~mkLit(v);
 }
 
 inline lbool eval(Lit l,const vec<lbool>& vals) {
   const Var v=var(l);
-  if(v>=vals.size()) return l_Undef;
+  if(v>=vals.size()) return SATSPC::l_Undef;
   const auto vv=vals[v];
-  if(vv==l_Undef)return l_Undef;
-  return (vv==l_False)==(sign(l)) ? l_True : l_False;
+  if(vv==SATSPC::l_Undef)return SATSPC::l_Undef;
+  return (vv==SATSPC::l_False)==(sign(l)) ? SATSPC::l_True : SATSPC::l_False;
 }
 
 inline void to_lits(const vec<lbool>& bv, vec<Lit>& output, int s, const int e) {
   for (int index = s; index <= e; ++index) {
-    if (bv[index]==l_True) output.push(mkLit((Var)index));
-    else if (bv[index]==l_False) output.push(~mkLit((Var)index));
+    if (bv[index]==SATSPC::l_True) output.push(mkLit((Var)index));
+    else if (bv[index]==SATSPC::l_False) output.push(~mkLit((Var)index));
   }
 }
 

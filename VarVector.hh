@@ -50,7 +50,7 @@ public:
   inline bool           empty() const;
   inline const_iterator begin() const;
   inline const_iterator end()   const;
-  inline const Var      operator [] (size_t index) const;
+  inline Var            operator [] (size_t index) const;
 private:
   static const size_t          EMPTY_HASH=1313;
   size_t                       _hash_code;
@@ -69,7 +69,7 @@ public:
   const_VarVectorIterator& operator++() {++i; return *this;}
   bool operator==(const const_VarVectorIterator& rhs) { assert(&ls==&(rhs.ls)); return i==rhs.i;}
   bool operator!=(const const_VarVectorIterator& rhs) { assert(&ls==&(rhs.ls)); return i!=rhs.i;}
-  const Var  operator*() const {return ls[i];}
+  Var  operator*() const {return ls[i];}
 private:
   const VarVector&               ls;
   size_t                          i;
@@ -103,7 +103,7 @@ inline int VarVector::decrease() {
 inline size_t VarVector::hash_code() const {return _hash_code;}
 inline size_t VarVector::size() const      {return _size;}
 inline bool VarVector::empty() const       {return _size==0;}
-inline const Var VarVector::operator [] (size_t index) const {
+inline Var VarVector::operator [] (size_t index) const {
   assert(index < _size);
   return _variables[index+1]; }
 

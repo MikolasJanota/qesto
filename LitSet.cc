@@ -1,19 +1,3 @@
-/*****************************************************************************/
-/*    This file is part of RAReQS.                                           */
-/*                                                                           */
-/*    rareqs is free software: you can redistribute it and/or modify         */
-/*    it under the terms of the GNU General Public License as published by   */
-/*    the Free Software Foundation, either version 3 of the License, or      */
-/*    (at your option) any later version.                                    */
-/*                                                                           */
-/*    rareqs is distributed in the hope that it will be useful,              */
-/*    but WITHOUT ANY WARRANTY; without even the implied warranty of         */
-/*    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          */
-/*    GNU General Public License for more details.                           */
-/*                                                                           */
-/*    You should have received a copy of the GNU General Public License      */
-/*    along with rareqs.  If not, see <http://www.gnu.org/licenses/>.        */
-/*****************************************************************************/
 /*
  * File:  LitSet.cc
  * Author:  mikolas
@@ -21,7 +5,7 @@
  * Copyright (C) 2011, Mikolas Janota
  */
 #include "LitSet.hh"
-#include "mtl/Sort.h"
+#include "minisat/mtl/Sort.h"
 using SATSPC::sort;
 using SATSPC::LessThan_default;
 LitSet::LitSet(const LiteralVector& lits) {
