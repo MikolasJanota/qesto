@@ -36,9 +36,12 @@ int main(int argc, char** argv) {
   nargv[nargc++] = _strdup("-e");
   nargv[nargc++] = _strdup("-y");
   nargv[nargc++] = argc>=2 ? _strdup(argv[1]) : _strdup("-");
-  if (argc>2) { cerr<<"c WARNING: ingoring some options after FILENAME"<<std::endl;}
+  if (argc>2) {
+      cerr<<"c WARNING: ingoring some options after FILENAME"<<std::endl;
+      return 100;
+  }
   argv=nargv;
-  argc=4;
+  argc=nargc;
 #else
   cerr<<"c WARNING: running in the EXPERT mode, I'm very stupid without any options."<<std::endl;
 #endif
